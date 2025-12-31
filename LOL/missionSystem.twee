@@ -1,0 +1,429 @@
+:: 主线任务列表 [nobr] {"position":"125,100","size":"100,100"}
+<<goto "任务委托列表">>
+
+
+:: 主线任务执行 [nobr] {"position":"200,100","size":"100,100"}
+<<set _stage = $MainMission.stages[$MainMission.currentStage]>>
+
+<h2>$MainMission.name</h2>
+<p><strong>第 <<= $MainMission.currentStage + 1>> 阶段：<<= _stage.name>></strong></p>
+<p><<= _stage.description>></p>
+
+<br>
+
+<<linkreplace "完成此阶段">>
+    <<run (function(){
+        $MainMission.stages[$MainMission.currentStage].complete = true;
+        if($MainMission.currentStage === $MainMission.stages.length - 1) {
+            $MainMission.complete = true;
+        }
+    })()>>
+    
+    <<if $MainMission.complete>>
+        <p><font color="green">✓ 主线任务已完成！</font></p>
+        [[返回|任务委托列表]]
+    <<else>>
+        <p><font color="green">阶段完成！前往下一阶段。</font></p>
+        [[下一阶段|任务委托列表][$MainMission.currentStage += 1]]
+    <</if>>
+<</linkreplace>>
+
+
+:: K执行 {"position":"1525,400","size":"100,100"}
+<<set _task = $ActiveMissions.find(t => t.id === "K")>>
+<<set _hasItems = $player.has(_task.requiredItem, _task.requiredCount)>>
+
+<h3><<= _task.name>>委托</h3>
+<p>需要收集：<<= _task.requiredCount>>个<<= _task.requiredItemName>></p>
+<p>当前拥有：<<= $player.count(_task.requiredItem)>>个<<= _task.requiredItemName>></p>
+
+<<if _hasItems>>
+	<<linkreplace "交付物品">>
+		<<run $player.drop(_task.requiredItem, _task.requiredCount)>>
+		<<set $Money += _task.reward>>
+		<<set $MissionStats.Success += 1>>
+		<<set $MissionStats.Total += 1>>
+		<<set $MissionStats.Fame += 1>>
+		<<run $ActiveMissions = $ActiveMissions.filter(t => t.id !== "K")>>
+		<p><font color="green">✓ 已交付<<= _task.requiredItemName>>！</font></p>
+		<p>你获得了<img src="img\ChoiceIcon\CurrencyIcon.png" width="25px"><font color="green"><<= _task.reward>></font>金</p>
+		<p><font color="green">你的名声增加了</font></p>
+		<br>
+		[[返回|任务委托列表]]
+	<</linkreplace>>
+<<else>>
+	<p><font color="red">物品数量不足，还需要<<= _task.requiredCount - $player.count(_task.requiredItem)>>个</font></p>
+	<br>
+	[[离开|任务委托列表]]
+<</if>>
+
+
+:: L接取 {"position":"1650,275","size":"100,100"}
+请输入文本
+<<link [[接取|任务委托列表]]>>
+	<<run $ActiveMissions.push({id: $MissionPreview, status: "accepted", complete: false, progress: 0})>>
+	<<set $MissionPreview = "">>
+<</link>>
+
+
+:: L执行 {"position":"1650,400","size":"100,100"}
+<<set _task = $ActiveMissions.find(t => t.id === "L")>>
+<<set _hasItems = $player.has(_task.requiredItem, _task.requiredCount)>>
+
+<h3><<= _task.name>>委托</h3>
+<p>需要收集：<<= _task.requiredCount>>个<<= _task.requiredItemName>></p>
+<p>当前拥有：<<= $player.count(_task.requiredItem)>>个<<= _task.requiredItemName>></p>
+
+<<if _hasItems>>
+	<<linkreplace "交付物品">>
+		<<run $player.drop(_task.requiredItem, _task.requiredCount)>>
+		<<set $Money += _task.reward>>
+		<<set $MissionStats.Success += 1>>
+		<<set $MissionStats.Total += 1>>
+		<<set $MissionStats.Fame += 1>>
+		<<run $ActiveMissions = $ActiveMissions.filter(t => t.id !== "L")>>
+		<p><font color="green">✓ 已交付<<= _task.requiredItemName>>！</font></p>
+		<p>你获得了<img src="img\ChoiceIcon\CurrencyIcon.png" width="25px"><font color="green"><<= _task.reward>></font>金</p>
+		<p><font color="green">你的名声增加了</font></p>
+		<br>
+		[[返回|任务委托列表]]
+	<</linkreplace>>
+<<else>>
+	<p><font color="red">物品数量不足，还需要<<= _task.requiredCount - $player.count(_task.requiredItem)>>个</font></p>
+	<br>
+	[[离开|任务委托列表]]
+<</if>>
+
+
+:: 任务交付 [nobr] {"position":"125,400","size":"100,100"}
+
+<<set _task = $ActiveMissions.find(t => t.id === $currentTaskId)>>
+<<if _task && _task.complete>>
+
+你完成了委托并获得了<img src="img\ChoiceIcon\CurrencyIcon.png" width="25px">
+    <<if _task.reward !== undefined>>
+        <<set _reward = _task.reward>>
+    <<else>>
+        <<set _reward = setup.missionRewards[$currentTaskId] || 0>>
+    <</if>>
+    <font color="green"><<= _reward >></font>金
+    <<set $Money += _reward>>
+<br>
+<br>
+
+<font color="green">你的名声增加了</font><br>
+
+[[结束|任务委托列表][$MissionStats.Activate = false; $MissionStats.Success += 1; $MissionStats.Total += 1; $MissionStats.Fame += 1; $ActiveMissions = $ActiveMissions.filter(t => t.id !== $currentTaskId); $currentTaskId = ""]]
+
+<<else>>
+<p><font color="red">发生错误：无法交付委托</font></p>
+[[返回|任务委托列表]]
+<</if>>
+
+
+:: 任务委托列表 [nobr] {"position":"125,150","size":"100,100"}
+
+<h3>= 主线任务 =</h3>
+<<if $MainMission.complete>>
+    <p><font color="green">✓ $MainMission.name - 已完成</font></p>
+<<else>>
+    <p><strong>$MainMission.name</strong></p>
+    <<set _stage = $MainMission.stages[$MainMission.currentStage]>>
+    <<if _stage>>
+        <div style="border-left: 3px solid #FFB90F; padding-left: 10px; margin: 10px 0;">
+            <p><strong>当前阶段 <<= $MainMission.currentStage + 1>>/<<= $MainMission.stages.length>></strong></p>
+            <p><<= _stage.name>> - <<= _stage.description>></p>
+            <<if !_stage.complete>>
+                [[继续阶段|主线任务执行]]
+            <<else>>
+                <font color="green">[已完成]</font>
+                <<if $MainMission.currentStage < $MainMission.stages.length - 1>>
+                    [[下一阶段|主线任务列表][$MainMission.currentStage += 1]]
+                <</if>>
+            <</if>>
+        </div>
+    <</if>>
+<</if>>
+
+<h3>= 活跃委托 =</h3>
+<<if $ActiveMissions.length > 0>>
+    <<for _task range $ActiveMissions>>
+        <div style="border: 1px solid #ccc; padding: 10px; margin: 5px 0; background: #f9f9f9; color: #333;">
+            <strong><<= _task.name || _task.id + "委托">></strong> - 
+            <<if _task.complete>>
+                <font color="green">[已完成]</font> 
+                [[交付|任务交付][$currentTaskId = _task.id]]
+            <<else>>
+                <font color="orange">[进行中]</font>
+                <<if _task.id eq "K">>
+                    [[做任务|K执行]]
+                <<elseif _task.id eq "L">>
+                    [[做任务|L执行]]
+                <</if>>
+            <</if>>
+        </div>
+    <</for>>
+<<else>>
+    <p><font color="grey">暂无活跃委托</font></p>
+<</if>>
+
+<h3>= 可接委托 =</h3>
+<<if $ActiveMissions.length < $MaxActiveMissions>>
+    <<if $MissionToday.length > 0>>
+        <!--打印每日委托，排除已接取的-->
+        <<for _mission range $MissionToday>>
+            <<if !$ActiveMissions.find(t => t.id === _mission)>>
+                <<print `<<${_mission}>>`>>
+            <</if>>
+        <</for>>
+    <<else>>
+        <font color="grey">暂时没有可以执行的委托</font>
+    <</if>>
+<<else>>
+    <p><font color="red">委托栏已满！请先完成或放弃委托。</font></p>
+<</if>>
+
+<br><br>
+[[名声+10|任务委托列表][$MissionStats.Fame+=10]]<br>
+[[+12小时|任务委托列表][$hour+=12]]
+
+
+:: 任务接取 [nobr] {"position":"125,275","size":"100,100"}
+你看了看委托要求：<br>
+<<switch $MissionPreview>>
+<<case "K">>
+		<<set _appleCount = $MissionPreviewData.appleCount>>
+		<<set _reward = $MissionPreviewData.reward>>
+		<p>现在非常想要吃苹果，请带<<= _appleCount>>个苹果来吧。</p>
+		<p>报酬：<<= _reward>>金币</p>
+		<br>
+		<<link [[接取|任务委托列表]]>>
+			<<run $ActiveMissions.push({
+				id: $MissionPreview,
+				name: setup.missionConfig[$MissionPreview].name,
+				type: "collect",
+				status: "accepted", 
+				complete: false, 
+				progress: 0,
+				requiredItem: "apple",
+				requiredItemName: "苹果",
+				requiredCount: _appleCount,
+				reward: _reward
+			})>>
+			<<set $MissionPreview = "">>
+			<<set $MissionPreviewData = {}>>
+		<</link>>
+		<br>
+		<<link [[看看别的|任务委托列表]]>>
+			<<set $MissionPreview = "">>
+
+			<<goto "任务委托列表">>
+		<</link>><br>
+<<case "L">>
+		<<set _berryCount = $MissionPreviewData.berryCount>>
+		<<set _reward = $MissionPreviewData.reward>>
+		<p>需要一些新鲜的野莓，请带<<= _berryCount>>个野莓来吧。</p>
+		<p>报酬：<<= _reward>>金币</p>
+		<br>
+		<<link [[接取|任务委托列表]]>>
+			<<run $ActiveMissions.push({
+				id: $MissionPreview,
+				name: setup.missionConfig[$MissionPreview].name,
+				type: "collect",
+				status: "accepted", 
+				complete: false, 
+				progress: 0,
+				requiredItem: "wild_berry",
+				requiredItemName: "野莓",
+				requiredCount: _berryCount,
+				reward: _reward
+			})>>
+			<<set $MissionPreview = "">>
+			<<set $MissionPreviewData = {}>>
+		<</link>>
+		<br>
+		<<link [[看看别的|任务委托列表]]>>
+			<<set $MissionPreview = "">>
+			<<goto "任务委托列表">>
+		<</link>><br>
+
+<</switch>>
+
+
+:: 任务组件 [nobr widget] {"position":"250,150","size":"100,100"}
+<<widget "K">>
+	·收集苹果委托，报酬：14-35金（随机数量）
+		<<link [[接取|任务接取]]>>
+			<<set $MissionPreview to "K">>
+			<<if !$MissionPreviewData.appleCount>>
+				<<set $MissionPreviewData to {
+					appleCount: random(2, 5)
+				}>>
+				<<set $MissionPreviewData.reward = $MissionPreviewData.appleCount * 7>>
+			<</if>>
+			<<goto "任务接取">>
+		<</link>>
+<br>
+<</widget>>
+
+<<widget "L">>
+	·收集野莓委托，报酬：30-42金（随机数量）
+		<<link [[接取|任务接取]]>>
+			<<set $MissionPreview to "L">>
+			<<if !$MissionPreviewData.berryCount>>
+				<<set $MissionPreviewData to {
+					berryCount: random(5, 7)
+				}>>
+				<<set $MissionPreviewData.reward = $MissionPreviewData.berryCount * 6>>
+			<</if>>
+			<<goto "任务接取">>
+		<</link>>
+<br>
+<</widget>>
+
+//任务管理工具函数
+<<widget "missionHelper">>
+	//检查任务是否已接取
+	<<run window.hasMission = function(missionId) {
+		return $ActiveMissions.some(t => t.id === missionId);
+	}>>
+	
+	//获取任务对象
+	<<run window.getMission = function(missionId) {
+		return $ActiveMissions.find(t => t.id === missionId);
+	}>>
+	
+	//标记任务完成
+	<<run window.completeMission = function(missionId) {
+		var task = $ActiveMissions.find(t => t.id === missionId);
+		if(task) task.complete = true;
+	}>>
+	
+	//移除任务
+	<<run window.removeMission = function(missionId) {
+		$ActiveMissions = $ActiveMissions.filter(t => t.id !== missionId);
+	}>>
+<</widget>>
+
+
+:: 时间组件 [nobr widget] {"position":"250,25","size":"100,100"}
+<<widget "timeWidget">>	<<nobr>>
+
+<<set $weekDay = ($day % 7) + 5>>
+<<if $weekDay > 7>>
+	<<set $weekDay -= 7>>
+<</if>>
+
+<<switch $weekDay>>
+	<<case 1>>周 一
+	<<case 2>>周 二
+	<<case 3>>周 三
+	<<case 4>>周 四
+	<<case 5>>周 五
+	<<case 6>>周 六
+	<<case 7>>周 日
+<</switch>>
+
+<<if $minute >= 60>>
+	<<set _tempmin = $minute - 60>>
+    <<set $minute = 0>>
+    <<set $minute = _tempmin>>
+    <<set $hour += 1>>
+    <<if $hour >= 24>>
+    	<<set _temphour = $hour - 24>>
+        <<set $hour = 0>>
+        <<set $hour = _temphour>>
+        <<set $day += 1>>
+    <</if>>
+    <<weatherWidget>> 
+
+<</if>>
+
+/*每日零点结算的变量在此设置归零*/
+  <<if $hour >= 24>>
+    	<<set _temphour = $hour - 24>>
+        <<set $hour = 0>>
+        <<set$hour = _temphour>>
+        <<set $day += 1>>
+         
+<!--时间组件内，名声到达一定标准时，从高级的任务里选择-->
+<<set $MissionToday to []>>
+<<set $MissionPreviewData = {}>>
+<<if $MissionStats.Fame >= 0 and $MissionStats.Fame <= 9>>
+<!--低名声每日可选任务-->
+	<<set _maxMissions = Math.min(3, $MissionSet1.length)>>
+	<<for _i to 0; _i lt _maxMissions; _i++>>
+		<<set _mission to either($MissionSet1)>>
+		<<if $MissionToday.indexOf(_mission) eq -1>>
+			<<set $MissionToday.push(_mission)>>
+		<<else>>
+			<<set _i -= 1>>
+		<</if>>
+	<</for>>
+<<elseif $MissionStats.Fame >= 10 and $MissionStats.Fame <= 19>>
+<!--中名声-->
+	<<set _maxMissions = Math.min(4, $MissionSet2.length)>>
+	<<for _i to 0; _i lt _maxMissions; _i++>>
+		<<set _mission to either($MissionSet2)>>
+		<<if $MissionToday.indexOf(_mission) eq -1>>
+			<<set $MissionToday.push(_mission)>>
+		<<else>>
+			<<set _i -= 1>>
+		<</if>>
+	<</for>>
+<<elseif $MissionStats.Fame >= 20>>
+<!--高名声-->
+	<<set _maxMissions = Math.min(5, $MissionSet3.length)>>
+	<<for _i to 0; _i lt _maxMissions; _i++>>
+		<<set _mission to either($MissionSet3)>>
+		<<if $MissionToday.indexOf(_mission) eq -1>>
+			<<set $MissionToday.push(_mission)>>
+		<<else>>
+			<<set _i -= 1>>
+		<</if>>
+	<</for>>
+<<else>>
+    <<set $MissionToday to []>>
+<</if>>
+
+<</if>>
+
+<<if $day > 30>>
+    <<if $month is 4 or $month is 6 or $month is 9 or $month is 11>>
+        <<set $day = 1>>
+        <<set $month += 1>>
+    <</if>>
+<</if>>
+<<if $day > 31>>
+    <<if $month is 1 or $month is 3 or $month is 5 or $month is 7 or $month is 8 or $month is 10>>
+        <<set $day = 1>>
+        <<set $month += 1>>
+    <</if>>
+    <<if $month is 12>>
+        <<set $day = 1>>
+        <<set $month = 1>>
+        <<set $year += 1>>
+    <</if>>
+<</if>>
+<<if $day > 28>>
+    <<if $month is 2>>
+        <<if ($year % 4 is 0 and $year % 100 is not 0) or ($year % 400 is 0)>>
+            <<if $day > 29>>
+                <<set $day = 1>>
+                <<set $month += 1>>
+            <</if>>
+        <<else>>
+            <<set $day = 1>>
+            <<set $month += 1>>
+        <</if>>
+    <</if>>
+<</if>>
+
+<<set $formattedMinute = $minute>>
+<<if $minute < 10>>
+    <<set $formattedMinute = "0" + "$minute">>
+<<endif>>
+
+<<set $showHour = $hour>>
+
+<</nobr>><</widget>>

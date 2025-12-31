@@ -1,0 +1,2298 @@
+:: StoryTitle
+LOL
+
+
+:: StoryData
+{
+  "ifid": "81274A4A-B097-4ADF-AEE3-D4C9974A546A",
+  "format": "SugarCube",
+  "format-version": "2.37.3",
+  "start": "篝火",
+  "tag-colors": {
+    "noreturn": "orange",
+    "widget": "blue",
+    "nobr": "purple"
+  },
+  "zoom": 1
+}
+
+
+:: Buy [nobr] {"position":"1100,675","size":"100,100"}
+<h2>Items for sale:</h2>
+<div class="shopping-interface">
+<<for _item, _amount range $shop.table>>
+    <<buylink _item _amount>>
+<</for>>
+</div>
+<br><br>
+[[Go back|Market]]
+
+
+:: Inventory {"position":"375,375","size":"100,100"}
+<div id="inventory-search">
+	<input type="text" id="inv-search-box" placeholder="Search items...">
+</div>
+<div id="inventory-categories">
+	<button class="category-btn active" data-category="all">All</button>
+	<button class="category-btn" data-category="ore">Ore</button>
+	<button class="category-btn" data-category="crafting">Crafting</button>
+	<button class="category-btn" data-category="decoration">Decoration</button>
+	<button class="category-btn" data-category="food">Consumable</button>
+</div>
+<<inv $player>>
+
+<div id="inventory-action-log" style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 8px; border: 1px solid #ddd;">
+	<p id="action-log-message" style="margin: 0; color: #555; font-style: italic;">你打开了背包翻找物品</p>
+</div>
+
+<<run (function() {
+    // 追踪连续消耗的物品
+    var lastConsumedItem = null;
+    var consumeCount = 0;
+    var consumeTimeout = null;
+    
+    // 分类按钮功能
+    $(document).off("click", ".category-btn").on("click", ".category-btn", function() {
+        var category = $(this).data("category");
+        var wrapper = $(".simple-inventory-wrapper");
+        var allItems = wrapper.find(".simple-inventory-listing:not(.all-listing)");
+        
+        // 更新按钮样式
+        $(".category-btn").removeClass("active");
+        $(this).addClass("active");
+        
+        // 清空搜索框
+        $("#inv-search-box").val("");
+        
+        if (category === "all") {
+            allItems.show();
+        } else {
+            allItems.each(function() {
+                var itemId = $(this).data("item-id").replace(/^-+|-+$/g, "");
+                var item_obj = setup.Item.get(itemId);
+                if (item_obj && item_obj.hasTag(category)) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+        }
+    });
+    
+    // 搜索框功能
+    $(document).off("input", "#inv-search-box").on("input", "#inv-search-box", function() {
+        var searchText = $(this).val().toLowerCase();
+        var wrapper = $(".simple-inventory-wrapper");
+        var allItems = wrapper.find(".simple-inventory-listing:not(.all-listing)");
+        var activeCategory = $(".category-btn.active").data("category");
+        
+        if (!searchText) {
+            // 如果搜索框为空，按分类显示
+            $(".category-btn.active").trigger("click");
+            return;
+        }
+        
+        allItems.each(function() {
+            var itemName = $(this).data("keyword").toLowerCase();
+            var itemId = $(this).data("item-id").replace(/^-+|-+$/g, "");
+            var item_obj = setup.Item.get(itemId);
+            var matchesSearch = itemName.includes(searchText);
+            var matchesCategory = activeCategory === "all" || (item_obj && item_obj.hasTag(activeCategory));
+            
+            if (matchesSearch && matchesCategory) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+    });
+    
+    // 消耗品使用功能
+    $(document).off("click", ".consume-btn").on("click", ".consume-btn", function() {
+        var itemId = $(this).data("item-id").replace(/^-+|-+$/g, "");
+        var item_obj = setup.Item.get(itemId);
+        
+        if (item_obj && item_obj.hasTag("food")) {
+            // 增加体力 - 使用配置表决定恢复量
+            var restoreAmount = (setup.foodEnergy && setup.foodEnergy[itemId]) ? setup.foodEnergy[itemId] : 20;
+            new Wikifier(null, "<<addStates \"energy\" " + restoreAmount + ">>");
+            // 消耗物品 - 从背包减少1个
+            $player.drop(itemId, 1);
+            
+            // 独特食物追踪系统
+            var isNewFood = false;
+            if (State.variables.uniqueFoodsEaten.indexOf(itemId) === -1) {
+                State.variables.uniqueFoodsEaten.push(itemId);
+                isNewFood = true;
+                
+                // 检查是否达到新的里程碑（每5个独特食物）
+                var uniqueCount = State.variables.uniqueFoodsEaten.length;
+                var newMilestones = Math.floor(uniqueCount / 5);
+                
+                if (newMilestones > State.variables.foodMilestonesReached) {
+                    // 增加体力上限
+                    var milestoneIncrease = (newMilestones - State.variables.foodMilestonesReached) * 10;
+                    State.variables.states.energy.max += milestoneIncrease;
+                    State.variables.foodMilestonesReached = newMilestones;
+                    
+                    // 显示特殊消息
+                    setTimeout(function() {
+                        $.wiki("你品尝了足够多的独特食物！体力上限增加了" + milestoneIncrease + "点！(当前上限: " + State.variables.states.energy.max + ")");
+                    }, 100);
+                }
+                
+                // 检查美食家成就（15/30/45种独特食物）
+                if (uniqueCount === 15) {
+                    setTimeout(function() {
+                        new Wikifier(null, "<<achievement '美食家1'>>");
+                    }, 200);
+                } else if (uniqueCount === 30) {
+                    setTimeout(function() {
+                        new Wikifier(null, "<<achievement '美食家2'>>");
+                    }, 200);
+                } else if (uniqueCount === 45) {
+                    setTimeout(function() {
+                        new Wikifier(null, "<<achievement '美食家3'>>");
+                    }, 200);
+                }
+            }
+            
+            // 更新消息日志
+            var itemName = item_obj.name;
+            
+            // 检查是否是连续消耗同一物品
+            if (lastConsumedItem === itemId) {
+                consumeCount++;
+            } else {
+                // 不同物品，重置计数
+                lastConsumedItem = itemId;
+                consumeCount = 1;
+            }
+            
+            // 清除之前的超时
+            if (consumeTimeout) {
+                clearTimeout(consumeTimeout);
+            }
+            
+            // 显示消息
+            var message = "你吃了" + itemName + "，恢复了" + restoreAmount + "体力。";
+            if (consumeCount > 1) {
+                message += "（x" + consumeCount + "）";
+            }
+            $("#action-log-message").text(message);
+            
+            // 3秒后重置为默认消息
+            consumeTimeout = setTimeout(function() {
+                $("#action-log-message").text("你打开了背包翻找物品");
+                lastConsumedItem = null;
+                consumeCount = 0;
+            }, 3000);
+            
+            // 刷新UI
+            $(".category-btn.active").trigger("click");
+        }
+    });
+    
+    // 为食物类物品添加消耗按钮
+    $(document).on(":inventory-update.simple-inventory", function() {
+        var wrapper = $(".simple-inventory-wrapper");
+        wrapper.find(".simple-inventory-listing:not(.all-listing)").each(function() {
+            var itemId = $(this).data("item-id").replace(/^-+|-+$/g, "");
+            var item_obj = setup.Item.get(itemId);
+            
+            // 如果是食物且还没有消耗按钮，添加它
+            if (item_obj && item_obj.hasTag("food") && !$(this).find(".consume-btn").length) {
+                // 找到最后一个操作按钮的位置，在其后插入消耗按钮
+                var lastBtn = $(this).find("a, button").last();
+                if (lastBtn.length) {
+                    $("<button>")
+                        .addClass("consume-btn")
+                        .text("Consume")
+                        .attr("data-item-id", $(this).data("item-id"))
+                        .insertAfter(lastBtn);
+                } else {
+                    // 如果没有找到按钮，直接在列表项的最后添加
+                    $("<button>")
+                        .addClass("consume-btn")
+                        .text("Consume")
+                        .attr("data-item-id", $(this).data("item-id"))
+                        .appendTo($(this));
+                }
+            }
+        });
+    });
+    
+    // 初始化时触发一次事件来添加消耗按钮
+    setTimeout(function() {
+        $(document).trigger(":inventory-update.simple-inventory");
+    }, 100);
+})()>>
+
+
+:: Location [nobr] {"position":"1600,675","size":"100,100"}
+<<set _locId = $currentLocationId>>
+<<set _loc = setup.locations[_locId]>>
+<<set _terrain = _loc.terrain>>
+<<set _cost = setup.terrainCosts[_terrain] ? setup.terrainCosts[_terrain] : 0>>
+<<set _currentEnergy = $states.energy.value>>
+<<if _currentEnergy >= _cost>>
+    <<set $states.energy.value = _currentEnergy - _cost>>
+    <h1><<= _loc.name>></h1>
+    <p><em>地形：<<= _terrain>></em>（消耗体力 <<= _cost>> 点）</p>
+    <p><<= _loc.description>></p>
+<<else>>
+    <h1><<= _loc.name>></h1>
+    <p><em>地形：<<= _terrain>></em>（消耗体力 <<= _cost>> 点）</p>
+    <p style="color: red;">体力不足，无法进入该地点！剩余体力 <<= _currentEnergy>>/<<= _cost>>。</p>
+    [[返回地图|Map]]
+    <<stop>>
+<</if>>
+
+<<set _locEvents = (_loc.events ? _loc.events : [])>>
+<<if not $locationStates[_locId]>>
+    <<set _triggered = []>>
+    <<set _hasEvent = false>>
+    <<for _ev range _locEvents>>
+        <<set _eventId = _ev.id>>
+        <<set _chance = _ev.chance ? _ev.chance : 100>>
+        <<set _roll = random(1,100)>>
+        <<if _roll <= _chance>>
+            <<set _hasEvent = true>>
+            <<set _triggered.push(_eventId)>>
+        <</if>>
+    <</for>>
+    <<set $locationStates[_locId] = { hasEvent: _hasEvent, triggeredEvents: _triggered }>>
+<</if>>
+
+<<set _locState = $locationStates[_locId]>>
+
+<<if _locState.hasEvent>>
+    <<for _eventId range _locState.triggeredEvents>>
+        <<set $currentEventPassage = setup.events[_eventId].passage>>
+        <p>你遇到了事件：<<= setup.events[_eventId].name>></p>
+        <<include $currentEventPassage>>
+    <</for>>
+<<else>>
+    <p>这里暂时没有可以发生的事件。</p>
+<</if>>
+
+<<link "返回地图">>
+    <<run delete $locationStates[$currentLocationId]>>
+    <<run delete $eventFlags.apple_tree_ripe>>
+    <<goto "Map">>
+<</link>>
+
+
+:: Map [nobr] {"position":"1450,675","size":"100,100"}
+<h1>地图</h1>
+<p>选择一个地点进行探索：</p>
+<div class="location-list">
+<<for _locId, _locData range setup.locations>>
+    <div class="location-item">
+        <h3><<= _locData.name>></h3>
+        <p><<= _locData.description>></p>
+        <<capture _locId>>
+            <<link "进入">>
+                <<set $currentLocationId = _locId>>
+                <<goto "Location">>
+            <</link>>
+        <</capture>>
+    </div>
+<</for>>
+</div>
+[[Go back|Start]]
+
+
+:: Market {"position":"1350,425","size":"100,100"}
+你抵达了森林市场。
+
+[[Buy Items|Buy]]
+[[Sell Items|Sell]]
+[[Go home|Start]]
+[[返回森林|Location]]
+
+
+<<button "exp + 20">>
+<<xp 20>>
+<</button>>
+
+
+:: PlayerStats {"position":"500,200","size":"100,100"}
+
+
+
+:: Sell [nobr] {"position":"1200,675","size":"100,100"}
+<h2>Items on hand:</h2>
+<div class="shopping-interface">
+<<for _item, _amount range $player.table>>
+    <<selllink _item _amount>>
+<</for>>
+</div>
+<br><br>
+[[Go back|Market]]
+
+
+:: Start {"position":"1325,675","size":"100,100"}
+You are at your house.
+
+Next to you is your storage locker!
+
+[[Open storage locker|Storage]]
+[[Go to the market|Market]]
+[[Go to the map|Map]]
+
+
+:: Storage {"position":"1325,825","size":"100,100"}
+<h2>On hand:</h2>\
+<<give $player $storage stack all>>
+<h2>In storage:</h2>\
+<<take $storage $player stack all>>
+
+[[Go back|Start]]
+
+
+:: StoryCaption {"position":"750,50","size":"100,100"}
+<<for _key, _state range $states>>
+  <font color="gold">_state.name：</font>
+  <<showProgress _key>>
+<</for>>
+<hr style="border: none; border-top: 1px solid white; margin: 1px;"><<timeWidget>> - $showHour : $formattedMinute<br><hr style="border: none; border-top: 1px solid white; margin: 0;">
+金钱：$Money <br>
+名声：$MissionStats.Fame | 活跃委托：<<= $ActiveMissions.length >>/$MaxActiveMissions<br>
+等级: @@#level;<<= $level>>@@ (XP: @@#xp;<<= $xp>>@@ / 距离下一级: @@#xp-to-next;<<= $xpToNext>>@@)
+
+
+:: StoryInit {"position":"625,50","size":"100,100"}
+//主角
+<<set $player={
+name:"召唤师",
+sanValue: 100,
+}>>
+<<set $level to 1>>
+<<set $xp to 0>>
+<<set $xpToNext to 50>>
+<<set $states = {
+    energy: { name: "体力", value: 50, max: 100 },
+
+}>>
+
+//独特食物追踪系统
+<<set $uniqueFoodsEaten to []>>  /*已吃过的独特食物列表*/
+<<set $foodMilestonesReached to 0>>  /*已达到的里程碑次数（每5个独特食物）*/
+
+    /*这里修改颜色档位和数值，要确保这两个一致*/
+<<set $rangesProgress=[20,40,60,80,90,100]>>
+<<set $colorProgress=["#92d618", "#19AAD1", "#d1bdff", "#FFCC4C", "#FF6090", "#EF303B"]>>
+/*<<run console.log($colorProgress)>>*/	
+
+
+//测试角色与队伍
+<<set $teamList to ["向日葵"]>>
+
+<<set $testCharA = {name : "向日葵",tie : 3,juqing : ["测试剧情1", "测试剧情2"]}>>
+
+
+//测试背包，库存与商店
+//新建玩家，商店和库存的inventory
+<<newinv $player>>
+<<newinv $shop>>
+<<newinv $storage>>
+
+<<set $Money to 100>>
+//新建物品
+<<item "coal" "Coal">><<tags "ore">><</item>>
+<<item "iron_ingot" "Iron Ingot">><<tags "ore">><</item>>
+<<item "glass_shard" "Glass Shard">><<tags "crafting">><</item>>
+<<item "gold_nugget" "Gold Nugget">><<tags "ore">><</item>>
+<<item "pretty_stone" "Pretty Stone">><<tags "decoration">><</item>>
+<<item "gemstone" "Gemstone">><<tags "crafting">><</item>>
+<<consumable "apple" "苹果">><<tags "food">><</consumable>>
+<<consumable "wild_berry" "野莓">><<tags "food">><</consumable>>
+<<consumable "berry_choc" "莓果巧克力">><<tags "food">><</consumable>>
+<<consumable "banana_choc" "香蕉巧克力">><<tags "food">><</consumable>>
+<<consumable "apple_choc" "苹果巧克力">><<tags "food">><</consumable>>
+<<consumable "fruit_salad" "水果沙拉">><<tags "food">><</consumable>>
+<<consumable "roast_chicken" "烤鸡">><<tags "food">><</consumable>>
+<<consumable "meat_stew" "肉类炖菜">><<tags "food">><</consumable>>
+<<consumable "mixed_vegetable_soup" "杂烩蔬菜汤">><<tags "food">><</consumable>>
+<<consumable "energy_drink_lemon" "柠檬味能量饮">><<tags "food">><</consumable>>
+<<consumable "fried_skewers_chicken_wings" "鸡翅炸串">><<tags "food">><</consumable>>
+
+// 食物体力恢复表
+<<set setup.foodEnergy = {
+    apple: 12,
+    wild_berry: 8,
+    berry_choc: 14,
+    banana_choc: 14,
+    apple_choc: 12,
+    fruit_salad: 16,
+    roast_chicken: 35,
+    meat_stew: 30,
+    mixed_vegetable_soup: 22,
+    energy_drink_lemon: 18,
+    fried_skewers_chicken_wings: 25
+}>>
+
+
+//设置物品价格：
+<<set setup.prices = new Map([
+    ["gemstone", 35],
+    ["coal", 2],
+    ["iron_ingot", 12],
+    ["glass_shard", 5],
+    ["gold_nugget", 50],
+    ["pretty_stone", 3],
+    ["apple", 5],
+    ["wild_berry", 4],
+    ["berry_choc", 10],
+    ["banana_choc", 10],
+    ["apple_choc", 8],
+    ["fruit_salad", 15],
+    ["roast_chicken", 25],
+    ["meat_stew", 30],
+    ["mixed_vegetable_soup", 20],
+    ["energy_drink_lemon", 12],
+    ["fried_skewers_chicken_wings", 18]
+])>>
+//给与对应inventory 物品
+<<set $currentCategory to "all">>
+<<pickup $shop "coal" 10 "gold_nugget" 2 "iron_ingot" 5>>
+<<pickup $storage "iron_ingot" 1 "glass_shard" 20>>
+<<pickup $player "glass_shard" 10 "pretty_stone" 20 "gemstone" 5 "apple" 10 "wild_berry" 5 "berry_choc" 2>>
+
+//===== 任务系统初始化 =====
+/* 时间 */
+<<set $minute = 0>>
+<<set $hour = 8>>
+<<set $day = 1>>
+<<set $weekDay = 1>>
+<<set $month = 1>>
+<<set $year = 1>>
+<<set $showMinute = 0>>
+<<set $showHour = 8>>
+<<set $formattedMinute = 0>>
+
+//多任务系统数据结构
+<<set $MissionStats to {
+  "Success": 0,     /*成功次数*/
+  "Total": 0,       /*总任务数*/
+  "Failure": 0,     /*失败次数*/
+  "Fame": 0         /*名声值*/
+}>>
+
+//活跃委托任务队列
+<<set $ActiveMissions = []>>
+
+//委托任务预览
+<<set $MissionPreview = "">>
+
+//委托任务预览数据（用于保存动态生成的任务数据）
+<<set $MissionPreviewData = {}>>
+
+//最大可同时进行的委托任务数
+<<set $MaxActiveMissions = 3>>
+
+//主线任务系统
+<<set $MainMission = {
+  "id": "main_1",           /*主线任务ID*/
+  "name": "第一章：起航",   /*主线任务名称*/
+  "currentStage": 0,        /*当前阶段索引*/
+  "complete": false,        /*是否完成*/
+  "stages": [
+    { id: "1-1", name: "与NPC对话", complete: false, description: "找到村长了解情况" },
+    { id: "1-2", name: "收集线索", complete: false, description: "收集三个线索物品" },
+    { id: "1-3", name: "做出决定", complete: false, description: "根据线索做出选择" }
+  ]
+}>>
+
+<<set $MissionSet1 to ["K", "L"]>>
+<<set $MissionSet2 to ["K", "L"]>>
+<<set $MissionSet3 to ["K", "L"]>>
+<<set $MissionToday to ["K", "L"]>>
+
+//任务奖励配置（收集任务使用动态奖励，不需要在此配置）
+<<set setup.missionRewards = {}>>
+
+//任务配置（显示名称和类型）
+<<set setup.missionConfig = {
+    K: { name: "收集苹果", type: "collect", itemId: "apple", itemName: "苹果" },
+    L: { name: "收集野莓", type: "collect", itemId: "wild_berry", itemName: "野莓" }
+}>>
+
+//收集类任务配置（可扩展）
+<<set setup.collectMissions = {
+    K: { itemId: "apple", itemName: "苹果", minCount: 2, maxCount: 5, rewardPerItem: 7 },
+    L: { itemId: "wild_berry", itemName: "野莓", minCount: 5, maxCount: 7, rewardPerItem: 6 }
+}>>
+
+// 地点与事件配置（支持多事件独立概率）
+<<set setup.locations = {
+    small_forest: {
+        id: "small_forest",
+        name: "小森林",
+        terrain: "forest",
+        description: "一个充满生机的小森林，绿树成荫。",
+        collectibles: [ { itemId: "apple", min: 1, max: 3, chance: 80 } ],
+        events: [
+            { id: "apple_tree_ripe", chance: 80 },
+            { id: "forest_merchant", chance: 30 }
+        ]
+    },
+    valley: {
+        id: "valley",
+        name: "溪谷",
+        terrain: "river",
+        description: "溪流环绕的山谷。",
+        events: [ { id: "wild_berries", chance: 80 } ],
+        collectibles: [ { itemId: "berry", min: 1, max: 4, chance: 70 } ]
+    }
+}>>
+
+<<set setup.events = {
+    apple_tree_ripe: {
+        id: "apple_tree_ripe",
+        name: "苹果树成熟",
+        weight: 100,
+        passage: "事件：苹果树成熟"
+    },
+    forest_merchant: {
+        id: "forest_merchant",
+        name: "森林商人",
+        weight: 30,
+        passage: "事件：森林商人"
+    },
+    wild_berries: {
+        id: "wild_berries",
+        name: "野莓丛",
+        weight: 80,
+        passage: "事件：野莓丛"
+    }
+}>>
+
+// 地形消耗映射
+<<set setup.terrainCosts = {
+    forest: 5,
+    river: 8,
+    mountain: 10
+}>>
+
+// 当前地点与事件变量
+<<set $currentLocationId to null>>
+<<set $currentEventId to null>>
+<<set $currentEventPassage to null>>
+<<set $eventFlags to {}>>
+<<set $locationStates to {}>>
+
+// 每日礼物系统配置
+<<set setup.dailyGifts = {
+    0: [ // 周日
+        { itemId: "apple", quantity: 5 },
+        { itemId: "glass_shard", quantity: 3 },
+        { itemId: "gemstone", quantity: 1 }
+    ],
+    1: [ // 周一
+        { itemId: "coal", quantity: 8 },
+        { itemId: "iron_ingot", quantity: 2 },
+        { itemId: "pretty_stone", quantity: 4 }
+    ],
+    2: [ // 周二
+        { itemId: "glass_shard", quantity: 5 },
+        { itemId: "gold_nugget", quantity: 1 },
+        { itemId: "apple", quantity: 3 }
+    ],
+    3: [ // 周三
+        { itemId: "iron_ingot", quantity: 4 },
+        { itemId: "gemstone", quantity: 2 },
+        { itemId: "coal", quantity: 6 }
+    ],
+    4: [ // 周四
+        { itemId: "pretty_stone", quantity: 6 },
+        { itemId: "gold_nugget", quantity: 2 },
+        { itemId: "apple", quantity: 4 }
+    ],
+    5: [ // 周五
+        { itemId: "gemstone", quantity: 3 },
+        { itemId: "glass_shard", quantity: 8 },
+        { itemId: "coal", quantity: 5 }
+    ],
+    6: [ // 周六
+        { itemId: "gold_nugget", quantity: 3 },
+        { itemId: "iron_ingot", quantity: 3 },
+        { itemId: "pretty_stone", quantity: 5 }
+    ]
+}>>
+
+<<set setup.weekDayNames = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]>>
+
+// 初始化玩家的每日礼物追踪
+<<set $dailyGiftLastClaimedDate to null>>
+
+// 镀金票券系统
+<<set $goldTickets to 0>>
+
+// 抽奖奖品池 (挂丢物品名称，你之後可改为itemId）
+<<set setup.lotteryPrizes = [
+    { itemId: "coal", quantity: 3, probability: 20 },
+    { itemId: "iron_ingot", quantity: 2, probability: 20 },
+    { itemId: "glass_shard", quantity: 5, probability: 20 },
+    { itemId: "gold_nugget", quantity: 1, probability: 18 },
+    { itemId: "pretty_stone", quantity: 4, probability: 12 },
+    { itemId: "gemstone", quantity: 1, probability: 10 }
+]>>
+
+// 镀金票券系统
+<<set $goldTickets to 0>>
+
+// 抽奖奖品池
+<<set setup.lotteryPrizes = [
+    { itemId: "coal", quantity: 3, probability: 20 },
+    { itemId: "iron_ingot", quantity: 2, probability: 20 },
+    { itemId: "glass_shard", quantity: 5, probability: 20 },
+    { itemId: "gold_nugget", quantity: 1, probability: 18 },
+    { itemId: "pretty_stone", quantity: 4, probability: 12 },
+    { itemId: "gemstone", quantity: 1, probability: 10 }
+]>>
+
+// 初始化玩家的每日礼物追踪
+<<set $dailyGiftLastClaimedDate to null>>
+
+
+//成就
+<<script>>
+// 定义成就
+window.defineAchievement(
+    '成就ID20',         // 第1个参数：成就ID（用于触发成就的唯一标识符）
+    '成就标题',          // 第2个参数：成就标题（显示给玩家看的名称）
+    '成就描述', // 第3个参数：成就描述（获得成就后显示的描述）
+    '🔑',               // 第4个参数：成就图标（可以用emoji或图片URL）（网络图片链接，本地图片路径）
+    'test',       // 第5个参数：成就分类（用于在成就列表中分类）
+    '未解锁描述' // 第6个参数：未解锁描述（成就未获得时显示的描述）
+);
+<</script>>
+
+<<script>>
+// 定义成就
+window.defineAchievement(
+    '成就：收集',         // 第1个参数：成就ID（用于触发成就的唯一标识符）
+    '成就：收集',          // 第2个参数：成就标题（显示给玩家看的名称）
+    '这是一个收集类成就', // 第3个参数：成就描述（获得成就后显示的描述）
+    'A',               // 第4个参数：成就图标（可以用emoji或图片URL）（网络图片链接，本地图片路径）
+    '收集品',       // 第5个参数：成就分类（用于在成就列表中分类）
+    '你还未解锁这个测试用收集成就' // 第6个参数：未解锁描述（成就未获得时显示的描述）
+);
+<</script>>
+
+<<script>>
+// 美食家成就系列
+window.defineAchievement(
+    '美食家1',
+    '美食家 I',
+    '你已经品尝了15种独特的食物！',
+    '🍴',
+    '美食',
+    '品尝15种独特的食物'
+);
+
+window.defineAchievement(
+    '美食家2',
+    '美食家 II',
+    '你已经品尝了30种独特的食物！真是个美食鉴赏家！',
+    '🍽️',
+    '美食',
+    '品尝30种独特的食物'
+);
+
+window.defineAchievement(
+    '美食家3',
+    '美食家 III',
+    '你已经品尝了45种独特的食物！你是真正的美食大师！',
+    '👨‍🍳',
+    '美食',
+    '品尝45种独特的食物'
+);
+<</script>>
+
+
+:: StoryMenu {"position":"1225,50","size":"100,100"}
+<<link"星灵的礼物">>
+  <<run openDailyGiftDialog()>>
+<</link>>
+
+<<link"检查成就状态">>
+  <<script>>
+    Dialog.create("检查成就状态");
+    Dialog.wikiPassage("check");
+    Dialog.open();
+  <</script>>
+<</link>>
+<<link "背包">>
+    <<run Dialog.setup("Inventory", "inventory"); Dialog.wiki(Story.get("Inventory").text); Dialog.open()>>
+<</link>>
+
+<<link "召唤之书">>
+	<<run multiplePopUpTab("page1", "1")>> //多页面弹窗测试，需要修改得进js
+<</link>>
+
+
+:: addStates [widget nobr] {"position":"1050,50","size":"100,100"}
+<<widget "addStates">>
+    /*_args[0]表示要增加的数值类型，只能是status中的属性*/
+    /*_args[1]表示要增加的数值*/
+
+//这里修改数值；
+    <<set _states=$states[_args[0]]>>
+    
+
+    <<set _states.value+=_args[1]>>
+
+//这里判断临界值；
+    <<if _states.value <0 >>
+        <<set _states.value=0>>
+    <</if>>
+    <<if _states.value > _states.max >>
+        <<set _states.value=_states.max>>
+    <</if>>
+    
+    /*指定颜色和width*/
+    <<set _width=(100*_states.value/_states.max)+"%">>
+    /*<<run console.log(_width)>>*/
+    
+
+    
+    <<set _width1=(100*_states.value/_states.max)>>
+    /*<<run console.log(_width1)>>*/
+
+/*这里判断处于那个区间*/
+    <<for _i, _name range $rangesProgress>>
+    <<if _width1<=_name>>
+        <<set _color= $colorProgress[_i]>>
+        <<break>>
+    <</if>>
+    <</for>>
+    
+    /*<<run console.log(_color)>>*/
+
+/*修改进度条属性*/
+    <<run $('#'+_args[0]+'').css({
+        'width': ''+_width+'',
+        'background-color': ''+_color+''
+    })>>
+
+    <</widget>>
+
+
+:: check [noreturn] {"position":"1425,50","size":"100,100"}
+<<checkachievement "成就ID20">>
+<<if $hasAchievement>>
+    已获得该成就！此处可以更改描述。
+<<else>>
+	未解锁
+<</if>>
+<<checkachievement "成就：收集">>
+<<if $hasAchievement>>
+    已获得该成就！此处可以更改描述。
+<<else>>
+	未解锁
+<</if>>
+
+
+:: inventoryWidgets [widget nobr] {"position":"950,150","size":"100,100"}
+<<widget "Money">>
+    <<set $Money to Math.clamp($Money + _args[0], 0, Infinity)>>
+    <<replace "#Money">><<= $Money>><</replace>>
+<</widget>>
+
+<<widget "buylink">>
+    <<set _item to _args[0]>>
+    <<set _amount to _args[1]>>
+    <<set _price to setup.prices.get(_item) || 1>>
+    <p @data-item="_item" class="buy-listing shop-listing">
+        <span class="item-name"><<= (setup.Item.has(_item) ? setup.Item.get(_item).name : _item) >></span>
+        <span class="price">价格：<strong><<= _price >></strong></span>
+        <span class="count"><<= _amount >></span>
+        <span class="actions">
+            <<capture _item, _amount, _price>>
+                <<link "购买">>
+                    <<if $Money < _price>>
+                        <<run UI.alert("你的金币不足！")>>
+                    <<else>>
+                        <<Money `-1 * _price`>>
+                        <<transfer $shop $player _item 1>>
+                        <<set _amount -->>
+                        <<if _amount > 0>>
+                            <<replace `"p.buy-listing[data-item=\"" + _item + "\"] > .count"`>><<= _amount >><</replace>>
+                        <<else>>
+                            <<remove `"p.buy-listing[data-item=\"" + _item + "\"]"`>>
+                        <</if>>
+                    <</if>>
+                <</link>>
+            <</capture>>
+        </span>
+    </p>
+<</widget>>
+
+<<widget "selllink">>
+    <<set _item to _args[0]>>
+    <<set _amount to _args[1]>>
+    <<set _price to setup.prices.get(_item) || 1>>
+    <p @data-item="_item" class="sell-listing shop-listing">
+        <span class="item-name"><<= (setup.Item.has(_item) ? setup.Item.get(_item).name : _item) >></span>
+        <span class="price">售价：<strong><<= _price >></strong></span>
+        <span class="count"><<= _amount >></span>
+        <span class="actions">
+            <<capture _item, _amount, _price>>
+                <<link "卖出">>
+                    <<Money _price>>
+                    <<transfer $player $shop _item 1>>
+                    <<set _amount -->>
+                    <<if _amount > 0>>
+                        <<replace `"p.sell-listing[data-item=\"" + _item + "\"] > .count"`>><<= _amount >><</replace>>
+                    <<else>>
+                        <<remove `"p.sell-listing[data-item=\"" + _item + "\"]"`>>
+                    <</if>>
+                <</link>>
+            <</capture>>
+        </span>
+    </p>
+<</widget>>
+
+
+:: showProgress [widget nobr] {"position":"950,50","size":"100,100"}
+<<widget "showProgress">><<nobr>>
+    <<set _states=$states[_args[0]]>>
+    
+    <<set _width1=(100*_states.value/_states.max)>>
+    
+    <<for _i, _name range $rangesProgress>>
+    <<capture _i>>
+    <<if _width1<=_name>>
+        <<set _color= $colorProgress[_i]>>
+        <<break>>
+    <</if>>
+    <</capture>>
+    <</for>>
+    
+    <<set _style="background-color:"+_color+";width:"+_width1+"%">>
+    <div @id="'bar-'+_args[0]" class="state-bar" @data-state-id="_args[0]">
+        <div @id="_args[0]" class="state-progress" @style="_style"></div>
+        <div class="state-tooltip"></div>
+    </div>
+    
+    <<run setup.updateTooltip(_args[0])>>
+<</nobr>>
+<</widget>>
+
+
+:: xpWidgets [widget] {"position":"1050,150","size":"100,100"}
+<<widget "xp">>
+    <<set _gain to Number(_args[0] || 0)>>
+    <<run (function(){
+        $xp = Math.max(0, $xp + _gain);
+        while ($xp >= $xpToNext) {
+            $xp -= $xpToNext;
+            $level += 1;
+            $xpToNext = Math.ceil($xpToNext * 1.25);
+            UI.alert("Level up! Now level " + $level);
+        }
+    })()>>
+    <<replace "#level">><<= $level>><</replace>>
+    <<replace "#xp">><<= $xp>><</replace>>
+    <<replace "#xp-to-next">><<= $xpToNext>><</replace>>
+<</widget>>
+
+
+:: 主基地 {"position":"800,200","size":"100,100"}
+你回到了星界中的主基地。脚下是粗粝的,遍布碎石的土地，眺望远处可以看到璀璨的星云，据说这是来自巨神峰山脚的景象。
+你位于巨神峰临时营地，索拉卡恢复了你的队伍，现在可以前往其他地区拜访或调整队伍，出门探索。
+<<addStates "energy" $states.energy.max>>
+[[前往储物处|Storage]]
+[[调整队伍|TeamManagement]]
+[[准备出发|PrepareToDepart]]
+
+:: TeamManagement {"position":"475,150","size":"100,100"}
+
+:: PrepareToDepart {"position":"475,150","size":"100,100"}
+
+
+:: 主要剧情 {"position":"375,150","size":"100,100"}
+符文大陆：
+
+
+:: 事件：森林商人 {"position":"1600,550","size":"100,100"}
+<p>一位旅行商人正靠在小推车旁，摆出了各式货物。</p>
+
+[[和商人交易|Market]]
+
+
+:: 事件：苹果树成熟 {"position":"1700,425","size":"100,100"}
+<p>你来到一片空地，眼前的苹果树挂满了成熟的果实。</p>
+<div id="event-result"></div>
+
+<<set _min to 1>>
+<<set _max to 3>>
+<<set _amount to random(_min, _max)>>
+
+<<if not $eventFlags.apple_tree_ripe>>
+<<linkreplace "采集苹果">>
+    <<set $eventFlags.apple_tree_ripe = true>>
+    <<pickup $player "apple" _amount>>
+    <<replace "#event-result">>
+        <p>你采集到了苹果 x<<= _amount>>！</p>
+    <</replace>>
+<</linkreplace>>
+<<else>>
+<p>这棵苹果树已经被采摘过了。</p>
+<</if>>
+
+
+:: 事件：野莓丛 {"position":"1600,425","size":"100,100"}
+<p>你来到一片空地，眼前的野莓丛长满了成熟的红色莓果。</p>
+<div id="event-result"></div>
+
+<<set _min to 1>>
+<<set _max to 4>>
+<<set _amount to random(_min, _max)>>
+
+<<if not $eventFlags.berry_bush_harvested>>
+<<linkreplace "采集野莓">>
+    <<set $eventFlags.berry_bush_harvested = true>>
+    <<addStates "energy" -10>>
+    <<pickup $player "berry" _amount>>
+    <<replace "#event-result">>
+        <p>你采集到了野莓 x<<= _amount>>！</p>
+    <</replace>>
+<</linkreplace>>
+<<else>>
+<p>这棵野莓丛已经被采摘过了。</p>
+<</if>>
+
+
+:: 任务 {"position":"1425,200","size":"100,100"}
+<h3>= 主线任务 =</h3>
+<<if $MainMission.complete>>
+    <p><font color="green">✓ $MainMission.name - 已完成</font></p>
+<<else>>
+    <p><strong>$MainMission.name</strong></p>
+    <<set _stage = $MainMission.stages[$MainMission.currentStage]>>
+    <<if _stage>>
+        <div style="border-left: 3px solid #FFB90F; padding-left: 10px; margin: 10px 0;">
+            <p><strong>当前阶段 <<= $MainMission.currentStage + 1>>/<<= $MainMission.stages.length>></strong></p>
+            <p><<= _stage.name>> - <<= _stage.description>></p>
+            <<if !_stage.complete>>
+                <p><font color="orange">[进行中]</font></p>
+            <<else>>
+                <p><font color="green">[已完成]</font></p>
+            <</if>>
+        </div>
+    <</if>>
+<</if>>
+
+<h3>= 活跃委托 =</h3>
+<<if $ActiveMissions.length > 0>>
+    <<for _task range $ActiveMissions>>
+        <div style="border: 1px solid #ccc; padding: 10px; margin: 5px 0; background: #f9f9f9; color: #333;">
+            <strong><<= _task.name || _task.id + "委托">></strong> - 
+            <<if _task.complete>>
+                <font color="green">[已完成，可交付]</font>
+            <<else>>
+                <font color="orange">[进行中]</font>
+            <</if>>
+            <<if _task.type === "collect" && _task.requiredItem>>
+                <p>需要<<= _task.requiredItemName>>：<<= _task.requiredCount>>个（目前有<<= $player.count(_task.requiredItem)>>个）</p>
+                <p>奖励：<<= _task.reward>>金币</p>
+            <</if>>
+        </div>
+    <</for>>
+<<else>>
+    <p><font color="grey">暂无活跃委托</font></p>
+<</if>>
+
+<p style="margin-top: 15px;"><em>前往任务大厅接取或交付委托</em></p>
+
+
+:: 图鉴 {"position":"1675,200","size":"100,100"}
+C
+
+
+:: 地图1 {"position":"1225,150","size":"100,100"}
+AAAtest
+
+
+:: 对话1 {"position":"625,475","size":"100,100"}
+<<include 测试剧情1>>
+
+<<dialogue tree1 '测试名字' 'img/aaa.jpg'>>
+
+
+:: 思绪 {"position":"1825,200","size":"100,100"}
+D
+
+
+:: 成就 {"position":"1550,200","size":"100,100"}
+<<achievementspopup>>
+
+
+:: 统计 {"position":"1950,200","size":"100,100"}
+<div style="padding: 15px; background: #f5f5f5; color: #333; border-radius: 8px;">
+    <h2 style="text-align: center; color: #2c5aa0; margin-bottom: 20px;">📊 游戏统计</h2>
+    
+    <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #ff6b6b; margin-bottom: 10px;">🍽️ 美食探索</h3>
+        <p style="font-size: 18px; margin: 5px 0;">
+            已品尝独特食物：<strong style="color: #ff6b6b;"><<= $uniqueFoodsEaten.length>></strong> 种
+        </p>
+        <<if $uniqueFoodsEaten.length >= 5>>
+            <p style="font-size: 14px; color: #666; margin: 5px 0;">
+                （体力上限奖励：+<<= $foodMilestonesReached * 10>> 点）
+            </p>
+        <</if>>
+    </div>
+    
+    <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #95e1d3; margin-bottom: 10px;">⏰ 时间记录</h3>
+        <p style="font-size: 18px; margin: 5px 0;">
+            游戏内已过天数：<strong style="color: #95e1d3;"><<= $day>></strong> 天
+        </p>
+        <p style="font-size: 14px; color: #666; margin: 5px 0;">
+            当前时间：第 $year 年 $month 月 $day 日 $showHour:$formattedMinute
+        </p>
+    </div>
+    
+    <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #ffd93d; margin-bottom: 10px;">⭐ 任务成就</h3>
+        <p style="font-size: 16px; margin: 5px 0;">
+            完成委托数：<strong style="color: #ffd93d;"><<= $MissionStats.Success>></strong> 个
+        </p>
+        <p style="font-size: 16px; margin: 5px 0;">
+            名声值：<strong style="color: #ffd93d;"><<= $MissionStats.Fame>></strong>
+        </p>
+    </div>
+</div>
+
+
+:: 成就test {"position":"1525,50","size":"100,100"}
+此处会获得成就
+[[回到篝火|篝火]]
+
+
+:: 更新日志 {"position":"375,50","size":"100,100"}
+12月22日：完成队员检测，测试了对话树系统
+12月23日：完成了右上角弹出的成就系统，以及成就系统的检查单，使用js中的return和noreturn tag达到
+12月24日：完成了多页面弹窗，并实施在侧边栏中。
+12月25日：中文引号染色功能，侧边栏进度条外边框，与hover数值显示。
+侧边栏新增进度条式exp获得与等级显示，实时数值更新。可能的隐患：storycaption内包含片段playerstats，每次更新player exp的时候都需要    <<replace "#story-caption">><<include "PlayerStats">>		<</replace>>
+这样才能做到实时更新。
+12月26日-12月28日：返工
+12月29日：修改了侧边栏，现在只有体力会有进度条，经验值和等级由别的系统辅助完成。
+完成了背包系统的分类与搜索功能，新增了消耗品使用功能（点击consume按钮后，体力+20，背包物品-1）
+
+
+接下来
+召唤书的内页：里面包含当前任务，图鉴，思绪，成就，
+更新基地。
+
+
+:: 未命名片段 {"position":"375,250","size":"100,100"}
+<<linkreplace "问他为什么">>
+文本1
+<</linkreplace>>
+<<linkreplace "沉默不语">> 
+文本
+<</linkreplace>>
+
+
+:: 测试剧情1 {"position":"900,475","size":"100,100"}
+<<storytree tree1>>
+[
+    {
+        "id": "start",
+        "text": "你好，这是一个测试对话。好感度为$testCharA.tie。",
+        "choices": [
+            {
+                "text": "我想测试条件判断 (需要好感>2)",
+                "nextId": "条件测试",
+                "condition": "$testCharA.tie > 2"
+            },
+            {
+                "text": "我想测试标记系统",
+                "nextId": "标记测试",
+                "click": "<<toggle_flag _tree2 '已打招呼'>>"
+            },
+            {
+                "text": "我想测试变量系统",
+                "nextId": "变量测试"
+            },
+            {
+                "text": "好感+1",
+                "nextId": "start",
+                "click": "<<set $testCharA.tie +=1>>"
+            }
+        ]
+    },
+    {
+        "id": "条件测试",
+        "text": "你通过了条件检查！",
+        "choices": [
+            {
+                "text": "返回开始",
+                "nextId": "start"
+            }
+        ]
+    },
+    {
+        "id": "标记测试",
+        "text": "让我们看看你是否有'已打招呼'的标记。\n<<if setup.hasFlag('tree2','已打招呼')>>你确实有这个标记！<<else>>你还没有这个标记。<</if>>",
+        "choices": [
+            {
+                "text": "返回开始",
+                "nextId": "start"
+            }
+        ]
+    },
+    {
+        "id": "变量测试",
+        "text": "让我们设置一些变量。",
+        "choices": [
+            {
+                "text": "设置临时变量",
+                "nextId": "start",
+                "click": "<<set_tmp _tree2 'testTemp' true>>"
+            },
+            {
+                "text": "设置持久变量",
+                "nextId": "start",
+                "click": "<<set_var _tree2 'testVar' 100>>"
+            }
+        ]
+    }
+]
+<</storytree>>
+
+
+:: 测试剧情2 {"position":"925,325","size":"100,100"}
+你好，这里是测试剧情2
+哇哦
+[[返回篝火|篝火]]
+
+
+:: 测试成就 {"position":"1625,50","size":"100,100"}
+<<link"跳转到test""成就test">><<achievement "成就ID20">><</link>>
+
+
+:: 篝火 {"position":"625,350","size":"100,100"}
+“欢迎来到篝火，你可以在这里恢复体力等”
+[[任务委托|任务委托列表]]
+<<link"跳转到成就test""成就test">><<achievement "成就ID20">><</link>>
+<<link"镀金票券抽奖（当前票券：$goldTickets张）""镀金抽奖">><</link>>
+[[Go to the map|Map]]
+[[回到基地|主基地]]
+<img src="img/aaa.jpg">
+<<if $teamList.includes("向日葵") && $testCharA.tie >= 1 && not hasVisited('测试剧情1')>>
+[[好感为1，进入测试剧情1|对话1]]
+<</if>>
+<<if $teamList.includes("向日葵") && $testCharA.tie >= 2 && not hasVisited('测试剧情2')>>
+[[好感为2，进入测试剧情2|测试剧情2]]
+<</if>>
+
+
+:: 镀金抽奖 [nobr] {"position":"725,350","size":"100,100"}
+<h2>镀金抽奖系统</h2>
+<p>当前拥有的镀金票券：<strong>$goldTickets</strong> 张</p>
+
+<<if $goldTickets > 0>>
+<button id="lottery-btn">进行抽奖（消耗1张票券）</button>
+<div id="lottery-result" style="margin-top: 20px;"></div>
+
+<<script>>
+setTimeout(function() {
+    $(document).on('click', '#lottery-btn', function() {
+        if (State.variables.goldTickets <= 0) {
+            $('#lottery-result').html('<p style="color: red;">票券不足！</p>');
+            return;
+        }
+        
+        State.variables.goldTickets--;
+        
+        var totalProbability = 0;
+        setup.lotteryPrizes.forEach(function(prize) {
+            totalProbability += prize.probability;
+        });
+        
+        var random = Math.random() * totalProbability;
+        var cumulative = 0;
+        var winPrize = setup.lotteryPrizes[0];
+        
+        for (var i = 0; i < setup.lotteryPrizes.length; i++) {
+            cumulative += setup.lotteryPrizes[i].probability;
+            if (random < cumulative) {
+                winPrize = setup.lotteryPrizes[i];
+                break;
+            }
+        }
+        
+        var prizeName = setup.Item.has(winPrize.itemId) ? setup.Item.get(winPrize.itemId).name : winPrize.itemId;
+        
+        State.variables.player.pickup(winPrize.itemId, winPrize.quantity);
+        
+        var resultHTML = '<div style="text-align: center; padding: 30px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 15px; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3); border: 3px solid gold;">' +
+            '<h3 style="color: #FFD700; font-size: 28px; margin: 0 0 15px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.7);">✨ 恭喜！✨</h3>' +
+            '<p style="font-size: 24px; color: #FFD700; font-weight: bold; margin: 15px 0; text-shadow: 1px 1px 3px rgba(0,0,0,0.7);">' + prizeName + ' ×' + winPrize.quantity + '</p>' +
+            '<p style="font-size: 16px; color: #87CEEB; margin: 10px 0;">剩余票券：<span style="color: #FFD700; font-weight: bold; font-size: 18px;">' + State.variables.goldTickets + '</span> 张</p>' +
+        '</div>';
+        
+        $('#lottery-result').html(resultHTML);
+        
+        $('p').first().html('当前拥有的镀金票券：<strong>' + State.variables.goldTickets + '</strong> 张');
+    });
+}, 100);
+<</script>>
+
+<<else>>
+<p style="color: red;">暂无镀金票券，完成成就可获得票券！</p>
+<</if>>
+
+[[返回篝火|篝火]]
+
+
+
+:: StoryScript [script]
+/* twine-user-script #1: "simple-inventory.js" */
+// Simple Inventory, for SugarCube 2, by Chapel
+// v3.0.1, 2024-07-22, 8c9749dbafa5f12948d743a8dedd4e1c74bb9e26
+;"use strict";function _typeof(t){return _typeof="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(t){return typeof t}:function(t){return t&&"function"==typeof Symbol&&t.constructor===Symbol&&t!==Symbol.prototype?"symbol":typeof t},_typeof(t)}function _classCallCheck(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}function _defineProperties(t,e){for(var n=0;n<e.length;n++){var i=e[n];i.enumerable=i.enumerable||!1,i.configurable=!0,"value"in i&&(i.writable=!0),Object.defineProperty(t,_toPropertyKey(i.key),i)}}function _createClass(t,e,n){return e&&_defineProperties(t.prototype,e),n&&_defineProperties(t,n),Object.defineProperty(t,"prototype",{writable:!1}),t}function _toPropertyKey(t){var e=_toPrimitive(t,"string");return"symbol"==_typeof(e)?e:String(e)}function _toPrimitive(t,e){if("object"!=_typeof(t)||!t)return t;var n=t[Symbol.toPrimitive];if(void 0!==n){var i=n.call(t,e||"default");if("object"!=_typeof(i))return i;throw new TypeError("@@toPrimitive must return a primitive value.")}return("string"===e?String:Number)(t)}!function(){var t={description:"",handler:null,displayName:"",consumable:!0,unique:!1,permanent:!1},e=new Map,n=function(){function n(){var e=arguments.length>0&&void 0!==arguments[0]?arguments[0]:"",i=arguments.length>1&&void 0!==arguments[1]?arguments[1]:clone(t),r=arguments.length>2&&void 0!==arguments[2]?arguments[2]:[];if(_classCallCheck(this,n),!e||"string"!=typeof e)throw new Error("invalid item ID");if("object"!==_typeof(i))throw new Error("invalid item definition");Object.assign(this,Object.assign({},t,i)),this.id=e,this._tags=r instanceof Array?r:"string"==typeof r?[r]:[]}return _createClass(n,[{key:"tags",get:function(){return this._tags}},{key:"hasTag",value:function(t){return this._tags.includes(t)}},{key:"hasAllTags",value:function(){return this._tags.includesAll([].slice.call(arguments).flat(1/0))}},{key:"hasAnyTags",value:function(){return this._tags.includesAny([].slice.call(arguments).flat(1/0))}},{key:"name",get:function(){return this.displayName||this.id},set:function(t){this.displayName=t}},{key:"use",value:function(){return"string"==typeof this.handler?$.wiki(this.handler):"function"==typeof this.handler&&this.handler(this),this}},{key:"inspect",value:function(){return Dialog.setup(this.name,"simple-inventory item-description"),Dialog.wiki(this.description),Dialog.open(),this}}],[{key:"is",value:function(t){return t instanceof n}},{key:"add",value:function(t,i,r){var a=new n(t,i,r);return e.set(t,a),a}},{key:"get",value:function(t){return e.get(t)}},{key:"has",value:function(t){return e.has(t)}},{key:"list",get:function(){return e}}]),n}();setup.Item=n,window.Item=window.Item||n}(),function(){var t=setup.Item,e=!1,n="&hellip;",i={inspect:"Inspect",use:"Use",drop:"Drop",stack:"stack",take:"Take",give:"Give",stackPre:"&nbsp;&times;&nbsp;",stackPost:"&nbsp;"},r={};function a(e){return t.has(e)&&t.get(e).unique}var s=function(){function s(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:{},e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:[];_classCallCheck(this,s),this.data=clone(t),this._tags=e instanceof Array?e:"string"==typeof e?[e]:[]}return _createClass(s,[{key:"emit",value:function(t){var e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:{};return s.emit(t,this,e),this}},{key:"array",get:function(){var t=this,e=[];return Object.keys(this.data).forEach((function(n){if(e.push(n),t.data[n]>1)for(var i=1;i<t.data[n];i++)e.push(n)})),e}},{key:"list",get:function(){return Object.keys(this.data)}},{key:"length",get:function(){return this.array.length}},{key:"uniqueLength",get:function(){return this.list.length}},{key:"table",get:function(){return this.data}},{key:"tags",get:function(){return this._tags}},{key:"hasTag",value:function(t){return this._tags.includes(t)}},{key:"hasAllTags",value:function(){return this._tags.includesAll([].slice.call(arguments).flat(1/0))}},{key:"hasAnyTags",value:function(){return this._tags.includesAny([].slice.call(arguments).flat(1/0))}},{key:"count",value:function(t){return t?this.data[t]||0:this.length}},{key:"has",value:function(t){var e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:1;return this.data[t]>=e}},{key:"hasAll",value:function(){var t=this;return[].slice.call(arguments).flat(1/0).every((function(e){return t.has(e)}))}},{key:"hasAny",value:function(){var t=this;return[].slice.call(arguments).flat(1/0).some((function(e){return t.has(e)}))}},{key:"compare",value:function(t){var e=this,n=s.itemset(t);return Object.keys(n).every((function(t){return e.has(t,n[t])}))}},{key:"merge",value:function(t){var e=this,n=s.itemset(t);return Object.keys(n).forEach((function(t){s.change(e,t,n[t])})),n}},{key:"unmerge",value:function(t){var e=this,n={},i=s.itemset(t);return Object.keys(i).forEach((function(t){e.has(t,i[t])?n[t]=i[t]:e.has(t)&&(n[t]=e.count(t)),s.change(e,t,i[t],!0)})),n}},{key:"pickup",value:function(){var t=this.merge(s.parseArgList.apply(null,arguments));return this.emit("update",{delta:t}),this}},{key:"drop",value:function(){var t=this.unmerge(s.parseArgList.apply(null,arguments));return this.emit("update",{delta:t}),this}},{key:"empty",value:function(){var t=clone(this.data);return this.data={},this.emit("update",{delta:t}),this}},{key:"transfer",value:function(t){var e=s.parseArgList.apply(null,[].slice.call(arguments).slice(1));if(!s.is(t))throw new TypeError("target inventory is not an inventory instance");var n=this.unmerge(e);return t.merge(n),this.emit("update",{target:t,delta:n}),this}},{key:"isEmpty",value:function(){return 0===this.length}},{key:"iterate",value:function(t){var e=this;return"function"!=typeof t||this.list.forEach((function(n){t(n,e.data[n])})),this}},{key:"use",value:function(e){if(t.has(e)){var n=t.get(e);if(n.use(),n.consumable){s.change(this,e,1,!0);var i={};i[e]=1,this.emit("update",{delta:i})}return this.emit("use",{item:n}),this}}},{key:"clone",value:function(){return new s(this.data||{},this._tags||[])}},{key:"toJSON",value:function(){return JSON.reviveWrapper("new setup.Inventory("+JSON.stringify(this.data)+", "+JSON.stringify(this._tags)+")")}}],[{key:"confirm",get:function(){return e},set:function(t){e="string"==typeof t&&"all"===t.trim().toLowerCase()?"all":"string"==typeof t&&"stack"===t.trim().toLowerCase()?"stack":!!t}},{key:"emptyMessage",get:function(){return n},set:function(t){"string"==typeof t&&(n=t)}},{key:"strings",get:function(){return Object.assign(clone(i),r)},set:function(t){"object"===_typeof(t)&&(r=Object.assign(r,clone(t)))}},{key:"change",value:function(e,n){var i=arguments.length>2&&void 0!==arguments[2]?arguments[2]:1,r=arguments.length>3&&void 0!==arguments[3]&&arguments[3];if(0!==i){if(e instanceof s&&(e=e.data),"object"!==_typeof(e)){if(e)throw new TypeError("cannot access inventory data");e={}}if(!(o=n)||"string"!=typeof o||!o.trim())throw new TypeError("invalid item name/id");var o;if("number"==typeof i&&!Number.isNaN(i)&&Number.isInteger(i)||(i=1),r&&(i*=-1),i>0){if(Object.keys(e).includes(n)&&a(n))return;i>1&&a(n)&&(i=1),Object.keys(e).includes(n)||(e[n]=0),e[n]+=i}else{if(function(e){return t.has(e)&&t.get(e).permanent}(n))return;Object.keys(e).includes(n)&&"number"==typeof e[n]&&(e[n]+=i),e[n]<=0&&delete e[n]}return e}}},{key:"itemset",value:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:{};if(s.is(t)&&(t=t.data),"object"!==_typeof(t))return{};var e={};return Object.keys(t).forEach((function(n){"number"==typeof t[n]&&Number.isInteger(t[n])&&0!==t[n]&&(e[n]=t[n])})),e}},{key:"parseArgList",value:function(){var t=[].slice.call(arguments).flat(1/0);if(t.length%2!=0)throw new Error("item sets should be pairs of item IDs and numbers");var e={};return t.forEach((function(n,i){i%2==0&&(e[n]=t[i+1])})),e}},{key:"is",value:function(t){return t instanceof s}},{key:"emit",value:function(t,e){var n=arguments.length>2&&void 0!==arguments[2]?arguments[2]:{};$(document).trigger(Object.assign({type:":inventory-"+t+".simple-inventory",inventory:e,target:null,delta:{},item:null},n))}},{key:"create",value:function(t,e){return new s(t,e)}}]),s}();setup.Inventory=s,window.Inventory=window.Inventory||s}(),function(){var t=setup.Item,e=setup.Inventory;function n(t){var n=arguments.length>1&&void 0!==arguments[1]?arguments[1]:null,i=arguments.length>2&&void 0!==arguments[2]&&arguments[2],r=arguments.length>3&&void 0!==arguments[3]?arguments[3]:"Alert",a=arguments.length>4&&void 0!==arguments[4]?arguments[4]:"Are you sure?";if(!t||"function"!=typeof t)throw new Error("Invalid confirmation callback!");if(e.confirm)if("all"!==e.confirm||"all"===i)if("stack"!==e.confirm||i){var s={display:"inline-block",float:"right"},o=$(document.createElement("div")),u=$(document.createElement("p")).append(a),l=$(document.createElement("div")).addClass("confirmation-buttons"),c=$(document.createElement("button")).append("Okay").addClass("confirm-yes").css(Object.assign(s,{"margin-right":"0.5rem"})),d=$(document.createElement("button")).append("Cancel").addClass("confirm-no").css(s);t&&"function"==typeof t&&c.ariaClick(t),n&&"function"==typeof n&&d.ariaClick(n),l.append(d,c),o.append(u,l),Dialog.setup(r,"simple-inventory confirmation"),Dialog.append(o),Dialog.open()}else t();else t();else t()}function i(t){var e=$(document.createElement("span")).addClass("spacer");return t&&e.wiki(""+t),e}function r(t,i){var r=arguments.length>2&&void 0!==arguments[2]&&arguments[2],a=arguments.length>3&&void 0!==arguments[3]?arguments[3]:null;return"give"===String(i).toLowerCase().trim()?i=e.strings.give:"take"===String(i).toLowerCase().trim()?i=e.strings.take:i&&"drop"!==String(i).toLowerCase().trim()||(i=e.strings.drop),$(document.createElement(r?"button":"a")).addClass("all-link drop-link").wiki(i+" all").ariaClick((function(){t.isEmpty()||n((function(){a&&e.is(a)?(a.merge(t),t.empty()):t.empty(),Dialog.close()}),(function(){Dialog.close()}),!0)}))}function a(a){var s,o=arguments.length>1&&void 0!==arguments[1]?arguments[1]:{description:!0,use:!0,transfer:null,drop:!0,all:!0,stack:!0,dropActionText:"",classes:""},u=$(document.createElement("ul")).addClass("simple-inventory-list");if(a.length){if(s=a.list.map((function(r){var s=[],u=r;t.has(r)&&(u=t.get(r).name),o.description&&t.has(r)&&t.get(r).description?s.push(function(n,i,r){var a=arguments.length>3&&void 0!==arguments[3]&&arguments[3];return r=r||e.strings.inspect,$(document.createElement(a?"button":"a")).addClass("inspect-link").wiki(""+r).ariaClick((function(){t.get(i).inspect()}))}(a,r,u)):s.push($(document.createElement("span")).append(t.has(r)?t.get(r).name:r).addClass("item-name")),s.push(function(t,n,i,r){var a=$(document.createElement("span")),s=t.count(n);return i=i||e.strings.stackPre,r=r||e.strings.stackPost,1==s?a.addClass("item-count single"):a.addClass("item-count multi"),a.append(""+i+(s||0)+r)}(a,r)),o.use&&t.has(r)&&t.get(r).handler?s.push(function(t,n,i){var r=arguments.length>3&&void 0!==arguments[3]&&arguments[3];return i=i||e.strings.use,$(document.createElement(r?"button":"a")).addClass("use-link").wiki(""+i).ariaClick((function(){t.use(n)}))}(a,r)):s.push(i()),(o.transfer&&e.is(o.transfer)||o.drop)&&!function(e){return t.has(e)&&t.get(e).permanent}(r)?(s.push(function(t,i,r){var a=arguments.length>3&&void 0!==arguments[3]&&arguments[3],s=arguments.length>4&&void 0!==arguments[4]?arguments[4]:null;return"give"===String(r).toLowerCase().trim()?r=e.strings.give:"take"===String(r).toLowerCase().trim()?r=e.strings.take:r&&"drop"!==String(r).toLowerCase().trim()||(r=e.strings.drop),$(document.createElement(a?"button":"a")).addClass("drop-link").wiki(""+r).ariaClick((function(){n((function(){s&&e.is(s)?t.transfer(s,i,1):t.drop(i,1),Dialog.close()}),(function(){Dialog.close()}))}))}(a,r,o.dropActionText,!1,o.transfer||null)),a.count(r)>1&&o.stack?s.push(function(t,i,r){var a=arguments.length>3&&void 0!==arguments[3]&&arguments[3],s=arguments.length>4&&void 0!==arguments[4]?arguments[4]:null;return"give"===String(r).toLowerCase().trim()?r=e.strings.give:"take"===String(r).toLowerCase().trim()?r=e.strings.take:r&&"drop"!==String(r).toLowerCase().trim()||(r=e.strings.drop),r=r+"&nbsp;"+e.strings.stack,$(document.createElement(a?"button":"a")).addClass("stack-link drop-link").wiki(""+r).ariaClick((function(){n((function(){s&&e.is(s)?t.transfer(s,i,t.count(i)):t.drop(i,t.count(i)),Dialog.close()}),(function(){Dialog.close()}))}))}(a,r,o.dropActionText,!1,o.transfer||null)):s.push(i())):s.push(i());var l=r.normalize().toLowerCase().replace(/\s+/g,"-");return $(document.createElement("li")).append(s).addClass("simple-inventory-listing").attr({"data-item-id":l,"data-keyword":u})})),o.all){var l=$(document.createElement("li")).addClass("all-listing simple-inventory-listing").append([i("&mdash;"),i(),i(),r(a,o.dropActionText,!1,o.transfer||null)]);s.push(l)}}else s=$(document.createElement("li")).addClass("simple-inventory-listing").append($(document.createElement("span")).wiki(e.emptyMessage));return u.append(s),u}e.prototype.interface=function(){var t,e=arguments.length>0&&void 0!==arguments[0]?arguments[0]:{},n=arguments.length>1&&void 0!==arguments[1]?arguments[1]:null,i=this,r=$(document.createElement("div")).addClass("simple-inventory-wrapper");return r.append(a(this,e)),$(document).on(":inventory-update.simple-inventory.gui-built-in",(function(){r.length?r.empty().append(a(i,e)):$(document).off(":inventory-update.simple-inventory.gui-built-in")})),n&&n instanceof $?t=n:n&&(t=$(n)),t&&r.appendTo(t),r}}(),function(){setup.Inventory,setup.Item;var t=".simple-inventory-userland",e=":inventory-update.simple-inventory"+t,n=":inventory-use.simple-inventory"+t;function i(t){return t&&"function"==typeof t}Object.assign(setup.Inventory,{events:{update:{on:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:null,n=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"";i(t)&&$(document).on(e+n,t)},one:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:null,n=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"";i(t)&&$(document).one(e+n,t)},off:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:"";$(document).off(e+t)}},use:{on:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:null,e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"";i(t)&&$(document).on(n+e,t)},one:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:null,e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"";i(t)&&$(document).one(n+e,t)},off:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:"";$(document).off(n+t)}}}})}(),function(){var t=":";function e(e){var n=function(t){return t.replace(/\r+/g,"\n").replace(/\n+/,"\n").replace(/ +/g," ").trim().split(/\n/g)}(e),i={};return n.forEach((function(e){if(e&&e.trim()&&e.includes(t)){var n=e.trim().split(t);i[n[0].trim()]=n[1].trim()}})),i}var n=function(t){try{return Story.has(t)?e(Story.get(t).text):{}}catch(t){return console.error(t.message,t),{}}}("inventory.strings");n.empty&&"string"==typeof n.empty&&n.empty.trim()&&(setup.Inventory.emptyMessage=n.empty,delete n.empty),setup.Inventory.strings=n||{}}(),function(){var t=setup.Item,e=setup.Inventory;function n(t){return t&&"string"==typeof t&&t.length>=2&&("$"===t[0]||"_"===t[0])}function i(t){if(n(t)&&(t=State.getVar(t)),e.is(t))return t}Macro.add(["item","consumable"],{tags:["description","tags","unique","permanent"],handler:function(){var e,n,i,r,a=null,s=!1,o=!1,u=!1;if(State.length>0)return this.error("items must be defined in `StoryInit` or story JavaScript!");if(!this.args[0]||"string"!=typeof this.args[0]||!this.args[0].trim())return this.error("invalid item ID");if(e=this.args[0].trim(),"consumable"===this.name&&(a=this.payload[0].contents||null,s=!0),this.args[1]&&(n=this.args[1]),this.payload.length>1){var l=this.payload.find((function(t){return"description"===t.name})),c=this.payload.find((function(t){return"tags"===t.name})),d=this.payload.find((function(t){return"unique"===t.name})),f=this.payload.find((function(t){return"permanent"===t.name}));l&&(i=l.contents.trim()),c&&(r=c.args.flat(1/0)),d&&(o=!0),f&&(u=!0)}t.add(e,{displayName:n||"",description:i||"",handler:a,consumable:s,unique:o,permanent:u},r)}}),Macro.add("newinv",{handler:function(){var t=this.args.raw.trim().split(" ").first().replace(/["']/g,"").trim();if(!n(t))return this.error("argument must be a story or temporary variable!");State.setVar(t,new e({},this.args.flat(1/0).slice(1)))}}),Macro.add(["pickup","drop"],{handler:function(){var t=i(this.args[0]);return t?this.args.length<3?this.error("no items to pick up were provided"):void t[this.name](this.args.slice(1)):this.error("first argument must be a valid inventory!")}}),Macro.add("dropall",{handler:function(){var t=i(this.args[0]);if(!t)return this.error("first argument must be a valid inventory!");t.empty()}}),Macro.add(["transfer","merge","unmerge"],{handler:function(){var t=i(this.args[0]);if(!t)return this.error("first argument must be a valid inventory!");var e=i(this.args[1]);if(!e)return this.error("second argument must be a valid inventory!");if("transfer"===this.name){if(this.args.length<4)return this.error("no items to transfer were provided");t.transfer(e,this.args.slice(2))}else t[this.name](e)}}),Macro.add(["inv","take","give"],{handler:function(){var t=null,n=i(this.args[0]);if(!n)return this.error("first argument must be a valid inventory!");this.args[1]&&i(this.args[1])&&(t=i(this.args[1]));var r={description:this.args.includesAny("inspect","description"),use:this.args.includes("use"),transfer:t,drop:this.args.includes("drop"),all:this.args.includes("all"),stack:this.args.includes("stack"),dropActionText:"inv"===this.name?"Drop":e.strings[this.name.trim().toLowerCase()],classes:"macro-".concat(this.name)};n.interface(r,$(this.output))}})}(),function(){var t=setup.Item,e=setup.Inventory;function n(t,e,n){if("object"!==_typeof(e))throw new TypeError("the extension should be a plain generic object holding the properties and methods you want to add");Object.keys(e).forEach((function(i){if(t[i]&&!n)throw new Error('Cannot override existing property "'+i+'"!');t[i]=e[i]}))}Object.assign(e,{extend:function(t){n(e,t,arguments.length>1&&void 0!==arguments[1]&&arguments[1])},extendPrototype:function(t){var i=arguments.length>1&&void 0!==arguments[1]&&arguments[1];n(e.prototype,t,i)}}),Object.assign(t,{extend:function(e){n(t,e,arguments.length>1&&void 0!==arguments[1]&&arguments[1])},extendPrototype:function(e){var i=arguments.length>1&&void 0!==arguments[1]&&arguments[1];n(t.prototype,e,i)}})}();
+// End Simple Inventory
+/* twine-user-script #2: "Story JavaScript" */
+Config.ui.stowBarInitially = false;
+
+//侧边栏显示hover属性
+setup.updateTooltip = function(stateId) {
+    $(document).on('mouseenter', '#bar-' + stateId, function(e) {
+        var states = State.variables.states[stateId];
+        var tooltip = $(this).find('.state-tooltip');
+        tooltip.text(states.value + '/' + states.max).show();
+    }).on('mousemove', '#bar-' + stateId, function(e) {
+        var tooltip = $(this).find('.state-tooltip');
+        var offset = $(this).offset();
+        tooltip.css({
+            left: e.pageX - offset.left,
+            top: e.pageY - offset.top - 30
+        });
+    }).on('mouseleave', '#bar-' + stateId, function() {
+        $(this).find('.state-tooltip').hide();
+    });
+};
+
+//noreturn
+$(document).on(':passagestart', function (ev) {
+    if (!ev.passage.tags.includes('noreturn')) {
+        State.variables.return = ev.passage.name;
+    }
+});
+
+// 事件选择：根据事件的 weight 进行加权随机选择
+setup.pickEventForLocation = function(locId) {
+    var loc = setup.locations[locId];
+    if (!loc || !loc.events || !loc.events.length) {
+        return null;
+    }
+    var list = loc.events;
+    var total = 0;
+    var weights = list.map(function(eid){
+        var w = (setup.events[eid] && setup.events[eid].weight) ? setup.events[eid].weight : 1;
+        total += w;
+        return w;
+    });
+    var r = Math.random() * total;
+    for (var i = 0; i < list.length; i++) {
+        if (r < weights[i]) {
+            return list[i];
+        }
+        r -= weights[i];
+    }
+    return list[0];
+};
+
+//可切换tab的弹窗
+/*需要几个弹窗切换，就设几个ID，然后写对应的弹窗页面名（注意：需要一个同名的页面）
+*/
+window.multiplePopUpTab = function(page, ID) {
+    let content = "";
+    let pages = {};
+
+    switch (ID) {
+        case "1":
+            pages = {
+                page1: "任务",
+                page2: "成就",
+              	page3: "图鉴",
+              	page4: "思绪",
+              	page5: "统计"
+            };
+            break;
+        case "2":
+            pages = {
+                page1: "传闻",
+                page2: "未完成任务",
+                page3: "已完成任务"
+            };
+            break;
+        default:
+            content = `
+                <div class="popup-content">
+                    <p>未知页面。</p>
+                </div>
+            `;
+    }
+
+    if (pages[page]) {
+        content = Story.get(pages[page]).processText(); 
+    } else {
+        console.error("未知页面！");
+        return;
+    }
+
+    if (ID === "1") {
+        Dialog.create(`
+            <div class="title-buttons">
+                <button onclick="multiplePopUpTab('page1', '1')" class="popup-button ${page === 'page1' ? 'active' : ''}">任务</button>
+                <button onclick="multiplePopUpTab('page2', '1')" class="popup-button ${page === 'page2' ? 'active' : ''}">成就</button>
+                <button onclick="multiplePopUpTab('page3', '1')" class="popup-button ${page === 'page3' ? 'active' : ''}">图鉴</button>
+                <button onclick="multiplePopUpTab('page4', '1')" class="popup-button ${page === 'page4' ? 'active' : ''}">思绪</button>
+                <button onclick="multiplePopUpTab('page5', '1')" class="popup-button ${page === 'page5' ? 'active' : ''}">统计</button>
+            </div>
+        `, "map-dialog");
+    } else if (ID === "2") {
+        Dialog.create(`
+            <div class="title-buttons">
+                <button onclick="multiplePopUpTab('page1', '2')" class="popup-button ${page === 'page1' ? 'active' : ''}">传闻</button>
+                <button onclick="multiplePopUpTab('page2', '2')" class="popup-button ${page === 'page2' ? 'active' : ''}">未完成任务</button>
+                <button onclick="multiplePopUpTab('page3', '2')" class="popup-button ${page === 'page3' ? 'active' : ''}">已完成任务</button>
+            </div>
+        `, "map-dialog");
+    }
+
+    Dialog.wiki(content);
+    Dialog.open();
+};
+
+/* twine-user-script #1: "storytree.js" */
+/* StoryTree, Ver.0.1.9, By BlackStar */
+/// Build Date: 2025-01-24T20:25:19.582Z
+(()=>{(()=>{function e(t){return e="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(e){return typeof e}:function(e){return e&&"function"==typeof Symbol&&e.constructor===Symbol&&e!==Symbol.prototype?"symbol":typeof e},e(t)}function t(e,t){if(!(e instanceof t))throw new TypeError("Cannot call a class as a function")}function r(e,t){for(var r=0;r<t.length;r++){var s=t[r];s.enumerable=s.enumerable||!1,s.configurable=!0,"value"in s&&(s.writable=!0),Object.defineProperty(e,n(s.key),s)}}function s(e,t,s){return t&&r(e.prototype,t),s&&r(e,s),Object.defineProperty(e,"prototype",{writable:!1}),e}function n(t){var r=function(t,r){if("object"!=e(t)||!t)return t;var s=t[Symbol.toPrimitive];if(void 0!==s){var n=s.call(t,r||"default");if("object"!=e(n))return n;throw new TypeError("@@toPrimitive must return a primitive value.")}return("string"===r?String:Number)(t)}(t,"string");return"symbol"==e(r)?r:r+""}!function(){var e,r,a,i=new(function(){return s((function e(){t(this,e),this.placeholders={strings:new Map,comments:new Map,templates:new Map},this.patterns={comments:/(\/\*[\s\S]*?\*\/|\/\/.*)/g,templates:/(`(?:\\[\s\S]|[^\\`])*?`)/g,strings:/(["'])(?:\\.|[^\\])*?\1/g,replacements:[{pattern:/(?<=[\s\n\t{}()\[\],;<>!=+\-*/%:|&]|^)\$(\w+)\b/g,replace:function(e,t){return"SugarCube.State.variables.".concat(t)}},{pattern:/(?<=[\s\n\t{}()\[\],;<>!=+\-*/%:|&]|^)_(\w+)\b/g,replace:function(e,t){return"SugarCube.State.temporary.".concat(t)}},{pattern:/(?<=[\s\n\t{}()\[\],;<>!=+\-*/%:|&]|^)setup\b/g,replace:function(){return"SugarCube.setup"}}]}}),[{key:"createPlaceholder",value:function(e,t){var r=this.placeholders[e],s=r.size+1,n="@@".concat(e.toUpperCase(),"_").concat(s,"@@");return r.set(n,t),n}},{key:"replace",value:function(e,t,r){var s=this;return e.replace(t,(function(e){return s.createPlaceholder(r,e)}))}},{key:"restore",value:function(e,t){var r=this.placeholders[t];return e.replace(new RegExp("@@".concat(t.toUpperCase(),"_\\d+@@"),"g"),(function(e){return r.get(e)}))}},{key:"process",value:function(e){try{Object.values(this.placeholders).forEach((function(e){return e.clear()}));var t=e;return t=this.replace(t,this.patterns.comments,"comments"),t=this.replace(t,this.patterns.templates,"templates"),t=this.replace(t,this.patterns.strings,"strings"),this.patterns.replacements.forEach((function(e){var r=e.pattern,s=e.replace;t=t.replace(r,s)})),t=this.restore(t,"strings"),t=this.restore(t,"templates"),t=this.restore(t,"comments")}catch(t){return console.error("处理代码时发生错误:",t),e}}}])}()),o=function(){return s((function e(r){var s=this;t(this,e),this.nodes=new Map,r.forEach((function(e){try{e.choices&&(e.choices=e.choices.map((function(e){if(e.condition&&"string"==typeof e.condition){var t=i.process(e.condition);e.condition=new Function("flags","temp","vars","session","return ".concat(t))}return e}))),s.nodes.set(e.id,e)}catch(t){console.error("Error setting node:",e.id,t)}}))}),[{key:"getNode",value:function(e){return this.nodes.get(e)}},{key:"getAllNodes",value:function(){return Array.from(this.nodes.values())}}])}();e=o,a={},(r=n(r="trees"))in e?Object.defineProperty(e,r,{value:a,enumerable:!0,configurable:!0,writable:!0}):e[r]=a;var c=function(){function e(r){var s=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"start",n=arguments.length>2&&void 0!==arguments[2]?arguments[2]:e.progress(s);t(this,e),this.varname=r,this.start=s,this.progress=n}return s(e,[{key:"visit",value:function(){var e=arguments.length>0&&void 0!==arguments[0]?arguments[0]:null,t=arguments.length>1&&void 0!==arguments[1]?arguments[1]:0;return e=null!=e?e:this.progress.current,this.tree.nodes.has(e)?(this.progress.visits[e]=(this.progress.visits[e]||0)+t,this.progress.visits[e]):0}},{key:"tree",get:function(){var e=State.getVar(this.varname);if(!e)throw new Error("Tree ".concat(this.varname," not found"));return e}},{key:"current",get:function(){return this.tree.getNode(this.progress.current)},set:function(e){this.progress.current=e}},{key:"choices",get:function(){var e=this,t=this.current;return null!=t&&t.choices?t.choices.map((function(t,r){return{index:r,text:t.text,available:"function"!=typeof t.condition||t.condition(e.progress.state.flags,e.progress.state.temporary,e.progress.state.variables,e)}})).filter((function(e){return e.available})).map((function(e){return{index:e.index,text:e.text}})):[]}},{key:"isInStart",get:function(){return"start"===this.progress.current}},{key:"make",value:function(e){var t=this.current;if(null==t||!t.choices)return!1;var r=t.choices[e];return!(!r||r.condition&&!r.condition(this.progress.state.flags,this.progress.state.temporary,this.progress.state.variables,this))&&(r.click&&$.wiki(r.click),this.progress.current=r.nextId,this.progress.state.temporary={},this.visit(r.nextId,1),$(document).trigger("storytree:choice",{session:this,choice:r,index:e}),!0)}},{key:"clone",value:function(){return new e(this.varname,this.start,this.progress)}},{key:"toJSON",value:function(){return Serial.createReviver(String.format("new {0}({1},{2},{3})","setup.GameSession",JSON.stringify(this.varname),JSON.stringify(this.start),JSON.stringify(this.progress)))}}],[{key:"progress",value:function(e){return{current:e,state:{flags:[],temporary:{},variables:{}},visits:{}}}}])}();window.SCProcessor=window.SCProcessor||i,window.StoryTree=window.StoryTree||o,window.GameSession=window.GameSession||c,setup.StoryTree=o,setup.GameSession=c,setup.SCProcessor=i}()})(),(()=>{(function(){function getVarname(e){return e.raw.trim().split(" ")[0].replace(/["'$_]/g,"").trim()}function getSession(e){var t=State.getVar("$dialogue_sessions");return t||(t={},State.setVar("$dialogue_sessions",t)),t[e]}function hasFlag(e,t){var r=getSession(e.replace(/[$_]/,""));return!!r&&r.progress.state.flags.includes(t)}function getSVar(e,t){var r=getSession(e);return r?r.progress.state.variables[t]:null}function setSVar(e,t,r){var s=getSession(e);if(!s)return null;s.progress.state.variables[t]=r}function getSTmp(e,t){var r=getSession(e);return r?r.progress.state.temporary[t]:null}function setSTmp(e,t,r){var s=getSession(e);if(!s)return null;s.progress.state.temporary[t]=r}Macro.add("storytree",{tags:null,handler:function handler(){var varname=getVarname(this.args),content=this.payload[0].contents.trim(),contentWithBrackets=content.startsWith("[")?content:"[".concat(content,"]");eval("State.temporary.".concat(varname," = new setup.StoryTree(").concat(contentWithBrackets,");"))}}),Macro.add("dialogue",{handler:function(){if(this.args.length<1)return this.error("Dialogue: varname is required");var e=getVarname(this.args),t=this.args[1]||null,r=this.args[2]||null,s=this.args[3]||"start",n=State.getVar("$dialogue_sessions");n||(n={},State.setVar("$dialogue_sessions",n));var a=n[e];a||(a=new GameSession("_".concat(e),s),n[e]=a);var i=$("<div>").addClass("story-dialogue").attr("id",e),o=$("<div>").addClass("avatar"),c=$("<div>").addClass("name"),u=$("<div>").addClass("content"),l=$("<div>").addClass("choices");c.wiki(t),o.css("background-image","url(".concat(r,")")),u.wiki(a.current.text);var g=function(e){a.make(e),u.empty(),u.wiki(a.current.text),l.empty(),a.choices.forEach((function(e,t){$("<a>").addClass("dialogue-choice").wiki(e.text).on("click",(function(){return g(e.index)})).appendTo(l)}))};a.choices.forEach((function(e,t){$("<a>").addClass("dialogue-choice").wiki(e.text).on("click",(function(){return g(e.index)})).appendTo(l)})),a.isInStart&&a.visit(null,1),i.append(o,c,u,l).appendTo(this.output)}}),Macro.add(["reset_dialogue","reset_dlg"],{handler:function(){this.args.length<=0&&State.setVar("$dialogue_sessions",{});var e=State.getVar("$dialogue_sessions");e?this.args.forEach((function(t){e[t]&&delete e[t]})):State.setVar("$dialogue_sessions",{})}}),Macro.add("toggle_flag",{handler:function(){var e=getSession(getVarname(this.args));if(!e)return this.error("Dialogue: session not found");var t=this.args.slice(1),r=e.progress.state.flags;t.forEach((function(e){r.includes(e)?r.splice(r.indexOf(e),1):r.push(e)}))}}),Macro.add("push_flag",{handler:function(){var e=getSession(getVarname(this.args));if(!e)return this.error("Dialogue: session not found");var t=this.args.slice(1),r=e.progress.state.flags;t.forEach((function(e){r.includes(e)||r.push(e)}))}}),Macro.add("remove_flag",{handler:function(){var e=getSession(getVarname(this.args));if(!e)return this.error("Dialogue: session not found");var t=this.args.slice(1),r=e.progress.state.flags;t.forEach((function(e){r.includes(e)&&r.splice(r.indexOf(e),1)}))}}),Macro.add("set_tmp",{handler:function(){var e=getSession(getVarname(this.args));if(!e)return this.error("Dialogue: session not found");for(var t=this.args.slice(1),r=0;r<t.length;r+=2){var s=t[r],n=t[r+1];void 0!==n&&(e.progress.state.temporary[s]=n)}}}),Macro.add("set_var",{handler:function(){var e=getSession(getVarname(this.args));if(!e)return this.error("Dialogue: session not found");for(var t=this.args.slice(1),r=0;r<t.length;r+=2){var s=t[r],n=t[r+1];void 0!==n&&(e.progress.state.variables[s]=n)}}}),window.hasFlag=window.hasFlag||hasFlag,setup.hasFlag=hasFlag,window.getSVar=window.getSVar||getSVar,setup.getSVar=getSVar,window.setSVar=window.setSVar||setSVar,setup.setSVar=setSVar,window.getSTmp=window.getSTmp||getSTmp,setup.getSTmp=getSTmp,window.setSTmp=window.setSTmp||setSTmp,setup.setSTmp=setSTmp})()})()})();
+/* End StoryTree */
+/* twine-user-script #2: "index.js" */
+setup.getPrice = function(basePrice) {
+    if(hasFlag('_tree1','态度敌对')) {
+        return basePrice * 3;
+    } else if(hasFlag('_tree1','态度友好')) {
+        return Math.floor(basePrice * 0.7);
+    }
+    return basePrice;
+};
+
+setup.canTrade = function(basePrice) {
+    const finalPrice = setup.getPrice(basePrice);
+    if(hasFlag && hasFlag('_tree1','态度敌对')) {
+        return State.variables.caps >= finalPrice;
+    }
+    return !hasFlag('_tree1','态度敌对') || State.variables.caps >= finalPrice;
+};
+
+
+
+/*成就系统*/
+
+if (window.setup === undefined) {
+    window.setup = {};
+}
+window.setup.achievements = [];
+window.setup.achievementDefinitions = [];
+window.setup.globalAchievements = [];
+window.defineAchievement = function(id, title, description, icon, category = "general", lockedDescription = "未解锁时的提示描述") {
+    let iconContent;
+    if (icon.startsWith('http') || icon.startsWith('https')) {
+        iconContent = `<img src="${icon}" class="achievement-icon-image" alt="${title}">`;
+    } else if (icon.endsWith('.png') || icon.endsWith('.jpg') || icon.endsWith('.jpeg') || icon.endsWith('.gif')) {
+        iconContent = `<img src="${icon}" class="achievement-icon-image" alt="${title}">`;
+    } else {
+        iconContent = icon;
+    }
+    window.setup.achievementDefinitions.push({
+        id: id,
+        title: title,
+        description: description,
+        lockedDescription: lockedDescription,
+        icon: iconContent,
+        category: category
+    });
+};
+Macro.add('achievement', {
+    handler: function() {
+        var id = this.args[0];
+        var achievement = window.setup.achievementDefinitions.find(a => a.id === id);
+        
+        if (!achievement) {
+            return this.error(`Achievement with ID "${id}" not found`);
+        }
+        
+        State.variables.achievements = State.variables.achievements || [];
+
+        var isUnlockedInCurrentSave = State.variables.achievements.some(a => a.id === id);
+
+        if (!isUnlockedInCurrentSave) {
+
+            const newAchievement = {
+                id: id,
+                unlockTime: new Date().toISOString()
+            };
+            
+            State.variables.achievements.push(newAchievement);
+            window.setup.achievements = State.variables.achievements;
+            
+            // 给予镀金票券
+            State.variables.goldTickets = (State.variables.goldTickets || 0) + 1;
+            
+            // 汇报镀金票券获得
+            var ticketMsg = $('<div class="ticket-reward"><span class="ticket-icon">🎫</span><p>获得镀金票券 x1</p></div>');
+            ticketMsg.appendTo('body');
+            setTimeout(() => ticketMsg.fadeOut(() => ticketMsg.remove()), 2000);
+
+            if (!window.setup.globalAchievements.some(a => a.id === id)) {
+                window.setup.globalAchievements.push(newAchievement);
+                localStorage.setItem('twine-global-achievements', JSON.stringify(window.setup.globalAchievements));
+            }
+            
+            var $achievement = $("<div class='achievement'>" +
+                "<div class='achievement-icon'>" + achievement.icon + "</div>" +
+                "<div class='achievement-content'>" +
+                    "<div class='achievement-title'>" + achievement.title + "</div>" +
+                    "<div class='achievement-description'>" + achievement.description + "</div>" +
+                "</div>" +
+            "</div>");
+
+            $achievement.appendTo('body');
+
+            requestAnimationFrame(() => {
+                $achievement.addClass('show');
+            });
+
+            setTimeout(() => {
+                $achievement.removeClass('show');
+                setTimeout(() => $achievement.remove(), 1000);
+            }, 5000);
+            
+            updateAchievementsList();
+        }
+    }
+});
+
+Macro.add('achievementspopup', {
+    handler: function() {
+        var categories = [...new Set(window.setup.achievementDefinitions.map(a => a.category))];
+        
+        var categoryOptions = categories.map(c => `<option value='${c}'>${c}</option>`).join('');
+        
+        var dialogHTML = "<div id='achievements-fragment'>" +
+            "<div class='achievements-filters'>" +
+                "<select id='category-filter'>" +
+                    "<option value='all'>全部分类</option>" +
+                    categoryOptions +
+                "</select>" +
+                "<select id='status-filter'>" +
+                    "<option value='all'>全部状态</option>" +
+                    "<option value='unlocked'>已解锁</option>" +
+                    "<option value='locked'>未解锁</option>" +
+                "</select>" +
+            "</div>" +
+            "<div id='achievements-list'></div>" +
+        "</div>";
+        
+        var $button = $("<button id='show-achievements'>查看成就</button>");
+        
+        $button.on('click', () => {
+            Dialog.setup("成就列表", "achievements");
+            Dialog.append(dialogHTML);
+            
+            $('#category-filter, #status-filter').on('change', updateAchievementsList);
+            
+            updateAchievementsList();
+            Dialog.open();
+        });
+        
+        $button.appendTo(this.output);
+    }
+});
+
+Macro.add('checkachievement', {
+    handler: function() {
+        var id = this.args[0];
+        State.variables.hasAchievement = State.variables.achievements && 
+                                       State.variables.achievements.some(a => a.id === id);
+    }
+});
+
+window.checkAchievementCondition = function(id, condition) {
+    if (condition && !State.variables.achievements.some(a => a.id === id)) {
+
+        Engine.play(`<<achievement '${id}'>>`);
+    }
+};
+
+function updateAchievementsList() {
+    var $list = $('#achievements-list');
+    if (!$list.length) return;
+
+    var categoryFilter = $('#category-filter').val();
+    var statusFilter = $('#status-filter').val();
+
+    var scrollTop = $list.scrollTop();
+
+    $list.css('min-height', $list.height());
+
+    $list.empty();
+
+    var fragment = document.createDocumentFragment();
+    var itemCount = 0;
+
+    window.setup.achievementDefinitions.forEach(achievement => {
+        var isUnlockedInCurrentSave = State.variables.achievements.some(a => a.id === achievement.id);
+        var isUnlockedGlobally = window.setup.globalAchievements.some(a => a.id === achievement.id);
+
+        if (categoryFilter !== 'all' && achievement.category !== categoryFilter) return;
+        if (statusFilter === 'unlocked' && !isUnlockedGlobally) return;
+        if (statusFilter === 'locked' && isUnlockedGlobally) return;
+
+        var title = isUnlockedGlobally ? achievement.title : "???";
+        var description = isUnlockedGlobally ? 
+            (isUnlockedInCurrentSave ? achievement.description : achievement.description + " (在其他存档中解锁)") : 
+            (achievement.lockedDescription || "未解锁的成就");
+        var icon = isUnlockedGlobally ? achievement.icon : "❓";
+        
+        var className = isUnlockedGlobally ? 
+            (isUnlockedInCurrentSave ? "unlocked-current" : "unlocked-other") : 
+            "locked";
+
+        var $achievementItem = $("<div>").addClass('achievement-item ' + className)
+            .attr('data-index', itemCount++) 
+            .append(
+                $("<span>").addClass('achievement-icon').html(icon),
+                $("<div>").addClass('achievement-info')
+                    .append(
+                        $("<span>").addClass('achievement-title').text(title),
+                        $("<div>").addClass('achievement-description').text(description)
+                    )
+            );
+
+        fragment.appendChild($achievementItem[0]);
+    });
+
+    $list.append(fragment);
+
+    $list.scrollTop(scrollTop);
+
+    setTimeout(() => {
+        $('.achievement-item').addClass('show');
+    }, 50);
+
+    setTimeout(() => {
+        $list.css('min-height', '');
+    }, 300);
+
+    if ($list.children().length === 0) {
+        $list.append("<div class='no-achievements'>没有符合条件的成就</div>");
+    }
+}
+
+function saveGlobalAchievements() {
+    try {
+        localStorage.setItem('twine-global-achievements', JSON.stringify(window.setup.globalAchievements));
+    } catch (e) {
+        console.error('Error saving global achievements:', e);
+    }
+}
+
+// 每日礼物宏
+Macro.add('dailygiftpopup', {
+    handler: function() {
+        var $button = $("<button id='show-daily-gift'>星灵的礼物</button>");
+        
+        $button.on('click', () => {
+            openDailyGiftDialog();
+        });
+        
+        $button.appendTo(this.output);
+    }
+});
+
+// 打开每日礼物弹窗的函数
+window.openDailyGiftDialog = function() {
+    var now = new Date();
+    var dayOfWeek = now.getDay();
+    var today = now.toDateString();
+    var weekDayName = setup.weekDayNames[dayOfWeek];
+    
+    // 检查今天是否已经领取
+    var alreadyClaimed = State.variables.dailyGiftLastClaimedDate === today;
+    
+    var dialogHTML = "<div id='daily-gift-content'>" +
+        "<div class='daily-gift-info'>" +
+            "<p><strong>今天是：</strong>" + weekDayName + "</p>" +
+            "<p><strong>日期：</strong>" + now.toLocaleDateString('zh-CN') + "</p>" +
+        "</div>";
+    
+    if (alreadyClaimed) {
+        dialogHTML += "<div class='gift-status already-claimed'>" +
+            "<p>✓ 你今天已经领取过礼物了！</p>" +
+            "<p>明天再来吧~</p>" +
+        "</div>";
+    } else {
+        var giftPool = setup.dailyGifts[dayOfWeek];
+        var randomGift = giftPool[Math.floor(Math.random() * giftPool.length)];
+        var itemName = setup.Item.get(randomGift.itemId).name;
+        
+        dialogHTML += "<div class='gift-status unclaimed'>" +
+            "<p>今日" + weekDayName + "的礼物：</p>" +
+            "<div class='gift-display'>" +
+                "<span class='gift-icon'>🎁</span>" +
+                "<p class='gift-item'><strong>" + itemName + " x" + randomGift.quantity + "</strong></p>" +
+            "</div>" +
+            "<button id='claim-daily-gift' data-item='" + randomGift.itemId + "' data-quantity='" + randomGift.quantity + "'>领取礼物</button>" +
+        "</div>";
+    }
+    
+    dialogHTML += "<div class='gift-pool-preview'>" +
+        "<h4>" + weekDayName + "礼物池：</h4>" +
+        "<ul>";
+    
+    setup.dailyGifts[dayOfWeek].forEach(gift => {
+        var itemName = setup.Item.get(gift.itemId).name;
+        dialogHTML += "<li>" + itemName + " x" + gift.quantity + "</li>";
+    });
+    
+    dialogHTML += "</ul></div></div>";
+    
+    Dialog.setup("星灵的礼物", "daily-gift");
+    Dialog.append(dialogHTML);
+    
+    // 绑定领取按钮事件
+    setTimeout(() => {
+        $('#claim-daily-gift').on('click', function() {
+            var itemId = $(this).data('item');
+            var quantity = $(this).data('quantity');
+            var itemName = setup.Item.get(itemId).name;
+            
+            // 添加物品到玩家背包
+            var inv = State.variables.player;
+            inv.pickup(itemId, quantity);
+            
+            // 记录领取日期
+            State.variables.dailyGiftLastClaimedDate = today;
+            
+            // 更新显示
+            $('.gift-status').removeClass('unclaimed').addClass('already-claimed');
+            $('.gift-status').html(
+                "<p>✓ 成功领取 " + itemName + " x" + quantity + "！</p>" +
+                "<p>已添加到你的背包中</p>" +
+                "<p>明天再来吧~</p>"
+            );
+            
+            $('#claim-daily-gift').remove();
+        });
+    }, 0);
+    
+    Dialog.open();
+};
+
+function loadGlobalAchievements() {
+    try {
+        const savedGlobalAchievements = localStorage.getItem('twine-global-achievements');
+        if (savedGlobalAchievements) {
+            window.setup.globalAchievements = JSON.parse(savedGlobalAchievements);
+        }
+    } catch (e) {
+        console.error('Error loading global achievements:', e);
+        window.setup.globalAchievements = [];
+    }
+}
+
+$(document).on(':passagestart', function() {
+    try {
+
+        loadGlobalAchievements();
+
+        State.variables.achievements = State.variables.achievements || [];
+        window.setup.achievements = State.variables.achievements;
+    } catch (e) {
+        console.error('Error loading achievements:', e);
+    }
+});
+
+$(document).on(':passagesave', function() {
+    try {
+        localStorage.setItem('twine-achievements', JSON.stringify(State.variables.achievements));
+        saveGlobalAchievements();
+    } catch (e) {
+        console.error('Error saving achievements:', e);
+    }
+});
+
+$(document).on(':stateload', function() {
+    try {
+
+        loadGlobalAchievements();
+
+        const currentSaveAchievements = State.variables.achievements || [];
+        window.setup.achievements = currentSaveAchievements;
+
+        updateAchievementsList();
+    } catch (e) {
+        console.error('Error loading achievements:', e);
+    }
+});
+
+:: StoryStylesheet [stylesheet]
+/* twine-user-stylesheet #1: "simple-inventory.css" */
+/* Simple Inventory, for SugarCube 2, by Chapel
+v3.0.1, 2024-07-22, 8c9749dbafa5f12948d743a8dedd4e1c74bb9e26 */
+ul.simple-inventory-list{margin:0 auto;padding:0}.simple-inventory-listing{list-style:none;padding:.3rem .3rem .3rem 1rem;display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr}.simple-inventory-listing>a,.simple-inventory-listing>span{display:inline-block}.all-listing.simple-inventory-listing{border-top:1px solid #fafafa;background-color:transparent}.drop-link{color:#e33}.drop-link:active,.drop-link:focus,.drop-link:hover{color:#f88}.consume-btn{color:#19AAD1;background-color:transparent;border:none;cursor:pointer;text-decoration:underline;padding:0;font-family:inherit;font-size:inherit}.consume-btn:active,.consume-btn:focus,.consume-btn:hover{color:#0d7a9e}.simple-inventory-filter{display:none !important;}.simple-inventory-filter input{display:none !important;}
+/* End Simple Inventory */
+/* twine-user-stylesheet #2: "Story Stylesheet" */
+.shopping-interface p {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto; /* 名称 / 价格 / 余量 / 操作 */
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.shop-listing {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #444;
+    border-radius: 6px;
+    background-color: #1f1f1f;
+}
+
+.shop-listing .item-name {
+    font-weight: 600;
+}
+
+.shop-listing .price strong {
+    color: #fca303;
+}
+
+.shop-listing .actions a {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border: 2px solid #555;
+    border-radius: 4px;
+    color: #fff;
+    background-color: #333;
+    transition: all 0.2s;
+}
+
+.shop-listing .actions a:hover {
+    background-color: #555;
+    border-color: #777;
+}
+
+#inventory-search {
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+#inv-search-box {
+    padding: 0.5rem;
+    width: 60%;
+    max-width: 300px;
+    background-color: #222;
+    color: #fff;
+    border: 2px solid #555;
+    font-size: 1rem;
+}
+
+#inv-search-box:focus {
+    outline: none;
+    border-color: rgba(252, 173, 3, 1);
+}
+
+#inventory-categories {
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
+}
+
+.category-btn {
+    padding: 0.5rem 1rem;
+    margin-right: 0; /* 使用容器 gap 控制间距 */
+    background-color: #333;
+    color: #fff;
+    border: 2px solid #555;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.category-btn:hover {
+    background-color: #555;
+}
+
+.category-btn.active {
+    background-color: #0f0;
+    color: #000;
+    border-color: #0f0;
+    font-weight: bold;
+}
+
+.simple-inventory-listing.cat-hidden {
+    display: none;
+}
+
+/* 小屏幕自适应：按钮在窄屏自动换行 */
+@media (max-width: 600px) {
+    #inventory-categories {
+        flex-wrap: wrap;
+        row-gap: 0.5rem;
+    }
+    .category-btn {
+        flex: 0 0 auto;
+    }
+}
+/*Inventory ends here*/
+
+
+
+/*侧边栏进度条 */
+.state-progress {
+  position: relative;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.state-bar {
+    position: relative;
+    cursor: pointer;
+    width: 232px;
+    height: 12px;  /* 加粗进度条用 */
+    /* 外边框 */
+    border: 1px solid #6b5fa7;
+    border-radius: 4px;
+    /* 内边距让进度条不贴边 */
+    padding: 1px;
+    box-sizing: border-box;
+    background: #1c1a24;
+}
+
+.state-tooltip {
+    display: none;
+    position: absolute;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+/* twine-user-stylesheet #1: "storytree.css" */
+/* StoryTree Styles, Ver.0.1.9 */
+/* Build Date: 2025-01-24T20:25:19.582Z */
+.story-dialogue{background:rgba(40,40,40,.95);border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.3);display:grid;gap:10px;grid-template-areas:"avatar name" "avatar content" "choices choices";grid-template-columns:80px 1fr;margin:20px auto;max-width:600px;padding:15px;position:relative}.story-dialogue .avatar{background-color:#e0e0e0;background-position:50%;background-size:cover;border-radius:4px;grid-area:avatar;height:60px;width:60px}.story-dialogue .name{color:#fff;font-size:1.1em;font-weight:700;grid-area:name;padding:5px 0}.story-dialogue .content{color:#e0e0e0;grid-area:content;line-height:1.5;margin-bottom:15px}.story-dialogue .choices{border-top:1px solid #444;display:flex;flex-direction:column;gap:8px;grid-area:choices;padding-top:10px}.story-dialogue .choices a{background:#444;border-radius:4px;color:#fff;padding:8px 15px;text-decoration:none;transition:background .2s}.story-dialogue .choices a:hover{background:#666;cursor:pointer}
+/* End StoryTree Styles */
+/* twine-user-stylesheet #2: "index.css" */
+.warning-box {
+    background: rgba(220, 53, 69, 0.1);
+    border-left: 4px solid #dc3545;
+    border-radius: 4px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.warning-title {
+    color: #dc3545;
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.warning-content {
+    color: #666;
+    line-height: 1.6;
+}
+
+.warning-content p {
+    margin: 0.5rem 0;
+}
+
+
+/* 成就系统 */
+.zoom-in {
+  display: inline-block;       
+  animation: zoomInEffect 0.6s ease forwards;
+  opacity: 0;                   
+}
+
+@keyframes zoomInEffect {
+  0% {
+    transform: scale(0.5);      /* 动画开始时缩小 */
+    opacity: 0;                 /* 初始时透明 */
+  }
+  50% {
+    transform: scale(1.2);      /* 中间阶段稍微放大 */
+    opacity: 1;                 /* 变为完全不透明 */
+  }
+  100% {
+    transform: scale(1);        /* 最终恢复到正常大小 */
+    opacity: 1;                 /* 保持完全不透明 */
+  }
+}
+
+:root {
+    --glass-strong: rgba(255, 255, 255, 0.12);
+    --glass-medium: rgba(255, 255, 255, 0.08);
+    --glass-light: rgba(255, 255, 255, 0.06);
+    --bg-modal: rgba(23, 25, 35, 0.95);  
+    --bg-dropdown: rgba(28, 30, 40, 0.95);
+    --bg-dropdown-hover: rgba(45, 50, 65, 0.98);
+    --bg-card: rgba(28, 30, 40, 0.95);
+    --text-primary: rgba(255, 255, 255, 0.95);
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --text-tertiary: rgba(255, 255, 255, 0.5);
+    --text-disabled: rgba(255, 255, 255, 0.35);
+    --border-light: rgba(255, 255, 255, 0.08);
+    --border-medium: rgba(255, 255, 255, 0.12);
+    --glow-primary: rgba(255, 255, 255, 0.15);
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.14);
+}
+
+@keyframes fadeScale {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes achievementSlideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+#show-achievements {
+    position: relative;
+    padding: 0.875rem 1.75rem;
+    background: var(--glass-light);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+    will-change: transform;  
+}
+
+#show-achievements:hover {
+    background: var(--glass-medium);
+    transform: translateY(-2px);
+}
+
+.achievements-popup {
+    display: none;
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    z-index: 999;
+    width: 85%;
+    max-width: 500px;
+    height: fit-content;
+    max-height: 70vh;
+    background: var(--bg-modal);
+    border: 1px solid var(--border-light);
+    animation: fadeScale 0.2s ease forwards;
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: var(--shadow-lg);
+    will-change: transform, opacity;  
+}
+
+.achievements-content {
+    background: var(--bg-card);
+    margin: 0;
+    padding: 1.25rem;
+    width: 100%;
+    height: 100%;
+    max-height: calc(70vh - 2rem);
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+    position: relative;
+    overflow-y: auto;
+    overscroll-behavior: contain;  
+}
+
+
+.achievements-content h3 {
+    color: var(--text-primary);
+    font-size: 1.125rem;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 1.25rem;
+    letter-spacing: -0.02em;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.achievements-filters {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 0.75rem;
+    background: var(--glass-light);
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+}
+
+.achievements-filters select {
+    flex: 1;
+    padding: 0.75rem 2rem 0.75rem 0.75rem;
+    background: var(--bg-dropdown);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 24 24' stroke='rgba(255,255,255,0.7)'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+    transition: background-color 0.2s ease;
+}
+
+.achievements-filters select:hover {
+    background-color: var(--bg-dropdown-hover);
+}
+
+.achievement-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.875rem;
+    margin-bottom: 0.625rem;
+    background: var(--glass-light);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    transition: transform 0.2s ease;
+    will-change: transform, opacity;
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-modal);
+    z-index: 998;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    display: none;
+}
+
+.achievement-item.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.achievement-item.unlocked-current {
+    background: var(--glass-medium);
+}
+
+.achievement-item.unlocked-other {
+    opacity: 0.8;
+}
+
+.achievement-item.locked {
+    opacity: 0.7;
+}
+
+.achievement-icon {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    background: var(--glass-medium);
+    border-radius: 6px;
+}
+
+.achievement-icon-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 6px;
+}
+
+.achievement-title {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.9375rem;
+    margin-bottom: 0.25rem;
+}
+
+.achievement-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+#close-achievements {
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    background: var(--glass-light);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 1000;
+}
+
+#close-achievements:hover {
+    color: var(--text-primary);
+    background: var(--glass-medium);
+}
+
+.achievement {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    width: 280px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    z-index: 999;
+    transform: translateX(100%);
+    opacity: 0;
+    will-change: transform, opacity;
+}
+
+.achievement.show {
+    animation: achievementSlideIn 0.3s ease forwards;
+}
+
+@media (max-width: 768px) {
+    .achievements-popup {
+        width: 90%;
+        max-height: 80vh;
+        padding: 0.75rem;
+    }
+    
+    .achievements-filters {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .achievement {
+        width: calc(100% - 2rem);
+        right: 1rem;
+    }
+}
+
+.achievements-content {
+    -webkit-overflow-scrolling: touch;  
+    scroll-behavior: smooth;
+}
+
+.achievements-popup,
+.achievement-item,
+.achievement {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+
+/*弹窗多tab */
+#ui-dialog-titlebar {   /*弹窗标题*/
+	background-color: #000;  /*标题的背景颜色*/
+	min-height: 24px;  /*最小高度*/
+	position: relative;  /*相对定位*/
+    height: 52px;
+}
+
+#ui-dialog-title {
+	font-size: 1.5em;  /* 标题的字体大小为1.5em（相对于父元素的字体大小） */
+	margin: 0;  /* 标题的外边距为0 */
+	padding: 0.2em 3.5em 0.2em 0.5em;  /* 标题的内边距，上下为0.2em，左右分别为3.5em和0.5em */
+	text-align: center;  /* 标题文字居中对齐 */
+	text-transform: uppercase;  /* 将标题文字转换为大写字母 */
+  
+}
+
+.title-buttons {
+    display: flex;
+    color:#fff;
+    gap: 10px; /* 按钮之间的间距 */
+    height: 100%; 
+}
+
+.popup-button {
+    background-color: #000; 
+    padding: 5px 10px;
+    cursor: pointer;
+    color: #ffffff;
+    text-align: center;
+    height: 3rem;
+    font-size: 15px;
+    border: transparent;
+    border-bottom: 1px solid #444;
+    /*background-color: black;*/
+}
+
+.popup-button:hover {
+  border-bottom: 1px solid #444;
+    
+}
+
+.popup-button:not(.active) {
+   
+}
+
+.popup-button.active {
+  background-color: rgba(169, 169, 169, 0.3);
+  border-radius: 20px 20px 0 0;
+}
