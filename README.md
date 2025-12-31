@@ -1,8 +1,10 @@
 # -Twine-LOL-
 通过收集信物召唤英雄，在异世界探索的故事。
+
 更新日志：
-12月22日：完成队员检测，测试了对话树系统
-12月23日：完成了右上角弹出的成就系统，以及成就系统的检查单，使用js中的return和noreturn tag达到
+
+12月22日：完成队员检测，测试了对话树系统。
+12月23日：完成了右上角弹出的成就系统，以及成就系统的检查单，使用js中的return和noreturn tag达到。
 12月24日：完成了多页面弹窗，并实施在侧边栏中。
 12月25日：中文引号染色功能，侧边栏进度条外边框，与hover数值显示。
 侧边栏新增进度条式exp获得与等级显示，实时数值更新。可能的隐患：storycaption内包含片段playerstats，每次更新player exp的时候都需要    <<replace "#story-caption">><<include "PlayerStats">>		<</replace>>
