@@ -1,0 +1,81 @@
+
+:: Location [nobr] {"position":"1600,675","size":"100,100"}
+<<set _locId = $currentLocationId>>
+<<set _loc = setup.locations[_locId]>>
+<<set _terrain = _loc.terrain>>
+<<set _cost = setup.terrainCosts[_terrain] ? setup.terrainCosts[_terrain] : 0>>
+<<set _currentEnergy = $states.energy.value>>
+<<if _currentEnergy >= _cost>>
+    <<set $states.energy.value = _currentEnergy - _cost>>
+    <h1><<= _loc.name>></h1>
+    <p><em>地形：<<= _terrain>></em>（消耗体力 <<= _cost>> 点）</p>
+    <p><<= _loc.description>></p>
+<<else>>
+    <h1><<= _loc.name>></h1>
+    <p><em>地形：<<= _terrain>></em>（消耗体力 <<= _cost>> 点）</p>
+    <p style="color: red;">体力不足，无法进入该地点！剩余体力 <<= _currentEnergy>>/<<= _cost>>。</p>
+    [[返回地图|Map]]
+
+<</if>>
+
+<<set _locEvents = (_loc.events ? _loc.events : [])>>
+<<if not $locationStates[_locId]>>
+    <<set _triggered = []>>
+    <<set _hasEvent = false>>
+    <<for _ev range _locEvents>>
+        <<set _eventId = _ev.id>>
+        <<set _chance = _ev.chance ? _ev.chance : 100>>
+        <<set _roll = random(1,100)>>
+        <<if _roll <= _chance>>
+            <<set _hasEvent = true>>
+            <<set _triggered.push(_eventId)>>
+        <</if>>
+    <</for>>
+    <<set $locationStates[_locId] = { hasEvent: _hasEvent, triggeredEvents: _triggered }>>
+<</if>>
+
+<<set _locState = $locationStates[_locId]>>
+
+<<if _locState.hasEvent>>
+    <<for _eventId range _locState.triggeredEvents>>
+        <<set $currentEventPassage = setup.events[_eventId].passage>>
+        <p>你遇到了事件：<<= setup.events[_eventId].name>></p>
+        <<include $currentEventPassage>>
+    <</for>>
+<<else>>
+    <p>这里暂时没有可以发生的事件。</p>
+<</if>>
+
+<<link "返回地图">>
+    <<run delete $locationStates[$currentLocationId]>>
+    <<run delete $eventFlags.apple_tree_ripe>>
+    <<goto "Map">>
+<</link>>
+
+
+:: Map [nobr] {"position":"1450,675","size":"100,100"}
+<h1>地图</h1>
+<p>选择一个地点进行探索：</p>
+<div class="location-list">
+<<for _locId, _locData range setup.locations>>
+    <div class="location-item">
+        <h3><<= _locData.name>></h3>
+        <p><<= _locData.description>></p>
+        <<capture _locId>>
+            <<link "进入">>
+                <<set $currentLocationId = _locId>>
+                <<goto "Location">>
+            <</link>>
+        <</capture>>
+    </div>
+<</for>>
+</div>
+[[Go back|Start]]
+
+:: Market {"position":"1350,425","size":"100,100"}
+你抵达了森林市场。
+
+[[Buy Items|Buy]]
+[[Sell Items|Sell]]
+[[Go home|Start]]
+[[返回森林|Location]]

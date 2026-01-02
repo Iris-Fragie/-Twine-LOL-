@@ -1,0 +1,72 @@
+:: GoldenTicketsInit [init]
+// 镀金票券系统
+<<set $goldTickets to 0>>
+
+// 抽奖奖品池
+<<set setup.lotteryPrizes = [
+    { itemId: "coal", quantity: 3, probability: 20 },
+    { itemId: "iron_ingot", quantity: 2, probability: 20 },
+    { itemId: "glass_shard", quantity: 5, probability: 20 },
+    { itemId: "gold_nugget", quantity: 1, probability: 18 },
+    { itemId: "pretty_stone", quantity: 4, probability: 12 },
+    { itemId: "gemstone", quantity: 1, probability: 10 }
+]>>
+
+
+:: 镀金抽奖 [nobr] {"position":"725,350","size":"100,100"}
+<h2>镀金抽奖系统</h2>
+<p>当前拥有的镀金票券：<strong>$goldTickets</strong> 张</p>
+
+<<if $goldTickets > 0>>
+<button id="lottery-btn">进行抽奖（消耗1张票券）</button>
+<div id="lottery-result" style="margin-top: 20px;"></div>
+
+<<script>>
+setTimeout(function() {
+    $(document).on('click', '#lottery-btn', function() {
+        if (State.variables.goldTickets <= 0) {
+            $('#lottery-result').html('<p style="color: red;">票券不足！</p>');
+            return;
+        }
+        
+        State.variables.goldTickets--;
+        
+        var totalProbability = 0;
+        setup.lotteryPrizes.forEach(function(prize) {
+            totalProbability += prize.probability;
+        });
+        
+        var random = Math.random() * totalProbability;
+        var cumulative = 0;
+        var winPrize = setup.lotteryPrizes[0];
+        
+        for (var i = 0; i < setup.lotteryPrizes.length; i++) {
+            cumulative += setup.lotteryPrizes[i].probability;
+            if (random < cumulative) {
+                winPrize = setup.lotteryPrizes[i];
+                break;
+            }
+        }
+        
+        var prizeName = setup.Item.has(winPrize.itemId) ? setup.Item.get(winPrize.itemId).name : winPrize.itemId;
+        
+        State.variables.player.pickup(winPrize.itemId, winPrize.quantity);
+        
+        var resultHTML = '<div style="text-align: center; padding: 30px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 15px; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3); border: 3px solid gold;">' +
+            '<h3 style="color: #FFD700; font-size: 28px; margin: 0 0 15px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.7);">✨ 恭喜！✨</h3>' +
+            '<p style="font-size: 24px; color: #FFD700; font-weight: bold; margin: 15px 0; text-shadow: 1px 1px 3px rgba(0,0,0,0.7);">' + prizeName + ' ×' + winPrize.quantity + '</p>' +
+            '<p style="font-size: 16px; color: #87CEEB; margin: 10px 0;">剩余票券：<span style="color: #FFD700; font-weight: bold; font-size: 18px;">' + State.variables.goldTickets + '</span> 张</p>' +
+        '</div>';
+        
+        $('#lottery-result').html(resultHTML);
+        
+        $('p').first().html('当前拥有的镀金票券：<strong>' + State.variables.goldTickets + '</strong> 张');
+    });
+}, 100);
+<</script>>
+
+<<else>>
+<p style="color: red;">暂无镀金票券，完成成就可获得票券！</p>
+<</if>>
+
+[[返回篝火|篝火]]

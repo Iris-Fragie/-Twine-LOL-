@@ -1,0 +1,332 @@
+:: AchievementInit [init]
+
+//成就定义
+<<script>>
+// 定义成就
+window.defineAchievement(
+    '成就ID20',         // 第1个参数：成就ID（用于触发成就的唯一标识符）
+    '成就标题',          // 第2个参数：成就标题（显示给玩家看的名称）
+    '成就描述', // 第3个参数：成就描述（获得成就后显示的描述）
+    '🔑',               // 第4个参数：成就图标（可以用emoji或图片URL）（网络图片链接，本地图片路径）
+    'test',       // 第5个参数：成就分类（用于在成就列表中分类）
+    '未解锁描述' // 第6个参数：未解锁描述（成就未获得时显示的描述）
+);
+<</script>>
+
+<<script>>
+// 定义成就
+window.defineAchievement(
+    '成就：收集',         // 第1个参数：成就ID（用于触发成就的唯一标识符）
+    '成就：收集',          // 第2个参数：成就标题（显示给玩家看的名称）
+    '这是一个收集类成就', // 第3个参数：成就描述（获得成就后显示的描述）
+    'A',               // 第4个参数：成就图标（可以用emoji或图片URL）（网络图片链接，本地图片路径）
+    '收集品',       // 第5个参数：成就分类（用于在成就列表中分类）
+    '你还未解锁这个测试用收集成就' // 第6个参数：未解锁描述（成就未获得时显示的描述）
+);
+<</script>>
+
+<<script>>
+// 美食家成就系列
+window.defineAchievement(
+    '美食家1',
+    '美食家 I',
+    '你已经品尝了15种独特的食物！',
+    '🍴',
+    '美食',
+    '品尝15种独特的食物'
+);
+
+window.defineAchievement(
+    '美食家2',
+    '美食家 II',
+    '你已经品尝了30种独特的食物！真是个美食鉴赏家！',
+    '🍽️',
+    '美食',
+    '品尝30种独特的食物'
+);
+
+window.defineAchievement(
+    '美食家3',
+    '美食家 III',
+    '你已经品尝了45种独特的食物！你是真正的美食大师！',
+    '👨‍🍳',
+    '美食',
+    '品尝45种独特的食物'
+);
+<</script>>
+
+
+:: AchievementScript [script]
+
+/*成就系统*/
+
+if (window.setup === undefined) {
+    window.setup = {};
+}
+window.setup.achievements = [];
+window.setup.achievementDefinitions = [];
+window.setup.globalAchievements = [];
+window.defineAchievement = function(id, title, description, icon, category = "general", lockedDescription = "未解锁时的提示描述") {
+    let iconContent;
+    if (icon.startsWith('http') || icon.startsWith('https')) {
+        iconContent = `<img src="${icon}" class="achievement-icon-image" alt="${title}">`;
+    } else if (icon.endsWith('.png') || icon.endsWith('.jpg') || icon.endsWith('.jpeg') || icon.endsWith('.gif')) {
+        iconContent = `<img src="${icon}" class="achievement-icon-image" alt="${title}">`;
+    } else {
+        iconContent = icon;
+    }
+    window.setup.achievementDefinitions.push({
+        id: id,
+        title: title,
+        description: description,
+        lockedDescription: lockedDescription,
+        icon: iconContent,
+        category: category
+    });
+};
+Macro.add('achievement', {
+    handler: function() {
+        var id = this.args[0];
+        var achievement = window.setup.achievementDefinitions.find(a => a.id === id);
+        
+        if (!achievement) {
+            return this.error(`Achievement with ID "${id}" not found`);
+        }
+        
+        State.variables.achievements = State.variables.achievements || [];
+
+        var isUnlockedInCurrentSave = State.variables.achievements.some(a => a.id === id);
+
+        if (!isUnlockedInCurrentSave) {
+
+            const newAchievement = {
+                id: id,
+                unlockTime: new Date().toISOString()
+            };
+            
+            State.variables.achievements.push(newAchievement);
+            window.setup.achievements = State.variables.achievements;
+            
+            // 给予镀金票券
+            State.variables.goldTickets = (State.variables.goldTickets || 0) + 1;
+            
+            // 汇报镀金票券获得
+            var ticketMsg = $('<div class="ticket-reward"><span class="ticket-icon">🎫</span><p>获得镀金票券 x1</p></div>');
+            ticketMsg.appendTo('body');
+            setTimeout(() => ticketMsg.fadeOut(() => ticketMsg.remove()), 2000);
+
+            if (!window.setup.globalAchievements.some(a => a.id === id)) {
+                window.setup.globalAchievements.push(newAchievement);
+                localStorage.setItem('twine-global-achievements', JSON.stringify(window.setup.globalAchievements));
+            }
+            
+            var $achievement = $("<div class='achievement'>" +
+                "<div class='achievement-icon'>" + achievement.icon + "</div>" +
+                "<div class='achievement-content'>" +
+                    "<div class='achievement-title'>" + achievement.title + "</div>" +
+                    "<div class='achievement-description'>" + achievement.description + "</div>" +
+                "</div>" +
+            "</div>");
+
+            $achievement.appendTo('body');
+
+            requestAnimationFrame(() => {
+                $achievement.addClass('show');
+            });
+
+            setTimeout(() => {
+                $achievement.removeClass('show');
+                setTimeout(() => $achievement.remove(), 1000);
+            }, 5000);
+            
+            updateAchievementsList();
+        }
+    }
+});
+
+Macro.add('achievementspopup', {
+    handler: function() {
+        var categories = [...new Set(window.setup.achievementDefinitions.map(a => a.category))];
+        
+        var categoryOptions = categories.map(c => `<option value='${c}'>${c}</option>`).join('');
+        
+        var dialogHTML = "<div id='achievements-fragment'>" +
+            "<div class='achievements-filters'>" +
+                "<select id='category-filter'>" +
+                    "<option value='all'>全部分类</option>" +
+                    categoryOptions +
+                "</select>" +
+                "<select id='status-filter'>" +
+                    "<option value='all'>全部状态</option>" +
+                    "<option value='unlocked'>已解锁</option>" +
+                    "<option value='locked'>未解锁</option>" +
+                "</select>" +
+            "</div>" +
+            "<div id='achievements-list'></div>" +
+        "</div>";
+        
+        var $button = $("<button id='show-achievements'>查看成就</button>");
+        
+        $button.on('click', () => {
+            Dialog.setup("成就列表", "achievements");
+            Dialog.append(dialogHTML);
+            
+            $('#category-filter, #status-filter').on('change', updateAchievementsList);
+            
+            updateAchievementsList();
+            Dialog.open();
+        });
+        
+        $button.appendTo(this.output);
+    }
+});
+
+Macro.add('checkachievement', {
+    handler: function() {
+        var id = this.args[0];
+        State.variables.hasAchievement = State.variables.achievements && 
+                                       State.variables.achievements.some(a => a.id === id);
+    }
+});
+
+window.checkAchievementCondition = function(id, condition) {
+    if (condition && !State.variables.achievements.some(a => a.id === id)) {
+
+        Engine.play(`<<achievement '${id}'>>`);
+    }
+};
+
+function updateAchievementsList() {
+    var $list = $('#achievements-list');
+    if (!$list.length) return;
+
+    var categoryFilter = $('#category-filter').val();
+    var statusFilter = $('#status-filter').val();
+
+    var scrollTop = $list.scrollTop();
+
+    $list.css('min-height', $list.height());
+
+    $list.empty();
+
+    var fragment = document.createDocumentFragment();
+    var itemCount = 0;
+
+    window.setup.achievementDefinitions.forEach(achievement => {
+        var isUnlockedInCurrentSave = State.variables.achievements.some(a => a.id === achievement.id);
+        var isUnlockedGlobally = window.setup.globalAchievements.some(a => a.id === achievement.id);
+
+        if (categoryFilter !== 'all' && achievement.category !== categoryFilter) return;
+        if (statusFilter === 'unlocked' && !isUnlockedGlobally) return;
+        if (statusFilter === 'locked' && isUnlockedGlobally) return;
+
+        var title = isUnlockedGlobally ? achievement.title : "???";
+        var description = isUnlockedGlobally ? 
+            (isUnlockedInCurrentSave ? achievement.description : achievement.description + " (在其他存档中解锁)") : 
+            (achievement.lockedDescription || "未解锁的成就");
+        var icon = isUnlockedGlobally ? achievement.icon : "❓";
+        
+        var className = isUnlockedGlobally ? 
+            (isUnlockedInCurrentSave ? "unlocked-current" : "unlocked-other") : 
+            "locked";
+
+        var $achievementItem = $("<div>").addClass('achievement-item ' + className)
+            .attr('data-index', itemCount++) 
+            .append(
+                $("<span>").addClass('achievement-icon').html(icon),
+                $("<div>").addClass('achievement-info')
+                    .append(
+                        $("<span>").addClass('achievement-title').text(title),
+                        $("<div>").addClass('achievement-description').text(description)
+                    )
+            );
+
+        fragment.appendChild($achievementItem[0]);
+    });
+
+    $list.append(fragment);
+
+    $list.scrollTop(scrollTop);
+
+    setTimeout(() => {
+        $('.achievement-item').addClass('show');
+    }, 50);
+
+    setTimeout(() => {
+        $list.css('min-height', '');
+    }, 300);
+
+    if ($list.children().length === 0) {
+        $list.append("<div class='no-achievements'>没有符合条件的成就</div>");
+    }
+}
+
+function saveGlobalAchievements() {
+    try {
+        localStorage.setItem('twine-global-achievements', JSON.stringify(window.setup.globalAchievements));
+    } catch (e) {
+        console.error('Error saving global achievements:', e);
+    }
+}
+
+function loadGlobalAchievements() {
+    try {
+        const savedGlobalAchievements = localStorage.getItem('twine-global-achievements');
+        if (savedGlobalAchievements) {
+            window.setup.globalAchievements = JSON.parse(savedGlobalAchievements);
+        }
+    } catch (e) {
+        console.error('Error loading global achievements:', e);
+        window.setup.globalAchievements = [];
+    }
+}
+
+$(document).on(':passagestart', function() {
+    try {
+
+        loadGlobalAchievements();
+
+        State.variables.achievements = State.variables.achievements || [];
+        window.setup.achievements = State.variables.achievements;
+    } catch (e) {
+        console.error('Error loading achievements:', e);
+    }
+});
+
+$(document).on(':passagesave', function() {
+    try {
+        localStorage.setItem('twine-achievements', JSON.stringify(State.variables.achievements));
+        saveGlobalAchievements();
+    } catch (e) {
+        console.error('Error saving achievements:', e);
+    }
+});
+
+$(document).on(':stateload', function() {
+    try {
+
+        loadGlobalAchievements();
+
+        const currentSaveAchievements = State.variables.achievements || [];
+        window.setup.achievements = currentSaveAchievements;
+
+        updateAchievementsList();
+    } catch (e) {
+        console.error('Error loading achievements:', e);
+    }
+});
+
+
+:: check [noreturn] {"position":"1425,50","size":"100,100"}
+<<checkachievement "成就ID20">>
+<<if $hasAchievement>>
+    已获得该成就！此处可以更改描述。
+<<else>>
+	未解锁
+<</if>>
+<<checkachievement "成就：收集">>
+<<if $hasAchievement>>
+    已获得该成就！此处可以更改描述。
+<<else>>
+	未解锁
+<</if>>

@@ -1,0 +1,164 @@
+:: multiplePopUpTabScript [script]
+
+//可切换tab的弹窗
+/*需要几个弹窗切换，就设几个ID，然后写对应的弹窗页面名（注意：需要一个同名的页面）
+*/
+window.multiplePopUpTab = function(page, ID) {
+    let content = "";
+    let pages = {};
+
+    switch (ID) {
+        case "1":
+            pages = {
+                page1: "任务",
+                page2: "成就",
+              	page3: "图鉴",
+              	page4: "思绪",
+              	page5: "统计"
+            };
+            break;
+        case "2":
+            pages = {
+                page1: "传闻",
+                page2: "未完成任务",
+                page3: "已完成任务"
+            };
+            break;
+        default:
+            content = `
+                <div class="popup-content">
+                    <p>未知页面。</p>
+                </div>
+            `;
+    }
+
+    if (pages[page]) {
+        content = Story.get(pages[page]).processText(); 
+    } else {
+        console.error("未知页面！");
+        return;
+    }
+
+    if (ID === "1") {
+        Dialog.create(`
+            <div class="title-buttons">
+                <button onclick="multiplePopUpTab('page1', '1')" class="popup-button ${page === 'page1' ? 'active' : ''}">任务</button>
+                <button onclick="multiplePopUpTab('page2', '1')" class="popup-button ${page === 'page2' ? 'active' : ''}">成就</button>
+                <button onclick="multiplePopUpTab('page3', '1')" class="popup-button ${page === 'page3' ? 'active' : ''}">图鉴</button>
+                <button onclick="multiplePopUpTab('page4', '1')" class="popup-button ${page === 'page4' ? 'active' : ''}">思绪</button>
+                <button onclick="multiplePopUpTab('page5', '1')" class="popup-button ${page === 'page5' ? 'active' : ''}">统计</button>
+            </div>
+        `, "map-dialog");
+    } else if (ID === "2") {
+        Dialog.create(`
+            <div class="title-buttons">
+                <button onclick="multiplePopUpTab('page1', '2')" class="popup-button ${page === 'page1' ? 'active' : ''}">传闻</button>
+                <button onclick="multiplePopUpTab('page2', '2')" class="popup-button ${page === 'page2' ? 'active' : ''}">未完成任务</button>
+                <button onclick="multiplePopUpTab('page3', '2')" class="popup-button ${page === 'page3' ? 'active' : ''}">已完成任务</button>
+            </div>
+        `, "map-dialog");
+    }
+
+    Dialog.wiki(content);
+    Dialog.open();
+};
+
+:: 任务 {"position":"1425,200","size":"100,100"}
+<h3>= 主线任务 =</h3>
+<<if $MainMission.complete>>
+    <p><font color="green">✓ $MainMission.name - 已完成</font></p>
+<<else>>
+    <p><strong>$MainMission.name</strong></p>
+    <<set _stage = $MainMission.stages[$MainMission.currentStage]>>
+    <<if _stage>>
+        <div style="border-left: 3px solid #FFB90F; padding-left: 10px; margin: 10px 0;">
+            <p><strong>当前阶段 <<= $MainMission.currentStage + 1>>/<<= $MainMission.stages.length>></strong></p>
+            <p><<= _stage.name>> - <<= _stage.description>></p>
+            <<if !_stage.complete>>
+                <p><font color="orange">[进行中]</font></p>
+            <<else>>
+                <p><font color="green">[已完成]</font></p>
+            <</if>>
+        </div>
+    <</if>>
+<</if>>
+
+<h3>= 活跃委托 =</h3>
+<<if $ActiveMissions.length > 0>>
+    <<for _task range $ActiveMissions>>
+        <div style="border: 1px solid #ccc; padding: 10px; margin: 5px 0; background: #f9f9f9; color: #333;">
+            <strong><<= _task.name || _task.id + "委托">></strong> - 
+            <<if _task.complete>>
+                <font color="green">[已完成，可交付]</font>
+            <<else>>
+                <font color="orange">[进行中]</font>
+            <</if>>
+            <<if _task.type === "collect" && _task.requiredItem>>
+                <p>需要<<= _task.requiredItemName>>：<<= _task.requiredCount>>个（目前有<<= $player.count(_task.requiredItem)>>个）</p>
+                <p>奖励：<<= _task.reward>>金币</p>
+            <</if>>
+        </div>
+    <</for>>
+<<else>>
+    <p><font color="grey">暂无活跃委托</font></p>
+<</if>>
+
+<p style="margin-top: 15px;"><em>前往任务大厅接取或交付委托</em></p>
+
+
+
+
+:: 图鉴 {"position":"1675,200","size":"100,100"}
+C
+
+
+:: 对话1 {"position":"625,475","size":"100,100"}
+<<include 测试剧情1>>
+
+<<dialogue tree1 '测试名字' 'img/aaa.jpg'>>
+
+
+:: 思绪 {"position":"1825,200","size":"100,100"}
+D
+
+
+:: 成就 {"position":"1550,200","size":"100,100"}
+<<achievementspopup>>
+
+
+:: 统计 {"position":"1950,200","size":"100,100"}
+<div style="padding: 15px; background: #f5f5f5; color: #333; border-radius: 8px;">
+    <h2 style="text-align: center; color: #2c5aa0; margin-bottom: 20px;">📊 游戏统计</h2>
+    
+    <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #ff6b6b; margin-bottom: 10px;">🍽️ 美食探索</h3>
+        <p style="font-size: 18px; margin: 5px 0;">
+            已品尝独特食物：<strong style="color: #ff6b6b;"><<= $uniqueFoodsEaten.length>></strong> 种
+        </p>
+        <<if $uniqueFoodsEaten.length >= 5>>
+            <p style="font-size: 14px; color: #666; margin: 5px 0;">
+                （体力上限奖励：+<<= $foodMilestonesReached * 10>> 点）
+            </p>
+        <</if>>
+    </div>
+    
+    <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #95e1d3; margin-bottom: 10px;">⏰ 时间记录</h3>
+        <p style="font-size: 18px; margin: 5px 0;">
+            游戏内已过天数：<strong style="color: #95e1d3;"><<= $day>></strong> 天
+        </p>
+        <p style="font-size: 14px; color: #666; margin: 5px 0;">
+            当前时间：第 $year 年 $month 月 $day 日 $showHour:$formattedMinute
+        </p>
+    </div>
+    
+    <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #ffd93d; margin-bottom: 10px;">⭐ 任务成就</h3>
+        <p style="font-size: 16px; margin: 5px 0;">
+            完成委托数：<strong style="color: #ffd93d;"><<= $MissionStats.Success>></strong> 个
+        </p>
+        <p style="font-size: 16px; margin: 5px 0;">
+            名声值：<strong style="color: #ffd93d;"><<= $MissionStats.Fame>></strong>
+        </p>
+    </div>
+</div>

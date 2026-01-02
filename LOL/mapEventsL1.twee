@@ -1,0 +1,48 @@
+
+:: 事件：森林商人 {"position":"1600,550","size":"100,100"}
+<p>一位旅行商人正靠在小推车旁，摆出了各式货物。</p>
+
+[[和商人交易|Market]]
+
+
+:: 事件：苹果树成熟 {"position":"1700,425","size":"100,100"}
+<p>你来到一片空地，眼前的苹果树挂满了成熟的果实。</p>
+<div id="event-result"></div>
+
+<<set _min to 1>>
+<<set _max to 3>>
+<<set _amount to random(_min, _max)>>
+
+<<if not $eventFlags.apple_tree_ripe>>
+<<linkreplace "采集苹果">>
+    <<set $eventFlags.apple_tree_ripe = true>>
+    <<pickup $player "apple" _amount>>
+    <<replace "#event-result">>
+        <p>你采集到了苹果 x<<= _amount>>！</p>
+    <</replace>>
+<</linkreplace>>
+<<else>>
+<p>这棵苹果树已经被采摘过了。</p>
+<</if>>
+
+
+:: 事件：野莓丛 {"position":"1600,425","size":"100,100"}
+<p>你来到一片空地，眼前的野莓丛长满了成熟的红色莓果。</p>
+<div id="event-result"></div>
+
+<<set _min to 1>>
+<<set _max to 4>>
+<<set _amount to random(_min, _max)>>
+
+<<if not $eventFlags.berry_bush_harvested>>
+<<linkreplace "采集野莓">>
+    <<set $eventFlags.berry_bush_harvested = true>>
+    <<addStates "energy" -10>>
+    <<pickup $player "berry" _amount>>
+    <<replace "#event-result">>
+        <p>你采集到了野莓 x<<= _amount>>！</p>
+    <</replace>>
+<</linkreplace>>
+<<else>>
+<p>这棵野莓丛已经被采摘过了。</p>
+<</if>>

@@ -1,0 +1,48 @@
+
+:: 主基地 {"position":"800,200","size":"100,100"}
+<div class="base-area">
+    <h2>主基地</h2>
+    <p>你回到了安全的基地。</p>
+    <p>当前体力: $states.energy.value/$states.energy.max</p>
+    <div class="hero-status-panel">
+        <h3>队伍状态</h3>
+        <<if $heroStates>>
+            <<for _heroId, _state range $heroStates>>
+                <<set _template to setup.Heroes[_heroId]>>
+                <div class="base-hero-card">
+                    <div class="hero-name">_template.name (Lv._state.level)</div>
+                    <div class="hero-hp">HP: _state.hp / _state.maxHp</div>
+                </div>
+            <</for>>
+        <</if>>
+    </div>
+    
+    <<if $states.energy.value < $states.energy.max>>
+        <<link "休息恢复体力" "主基地">>
+            <<set $states.energy.value to $states.energy.max>>
+        <</link>>
+    <</if>>
+    
+    <<link "治疗队伍（恢复所有英雄HP）" "主基地">>
+        <<for _heroId, _state range $heroStates>>
+            <<set _state.hp to _state.maxHp>>
+        <</for>>
+    <</link>>
+    
+    <<link "前往森林" "森林">><</link>>
+</div>
+
+
+
+
+/* 
+你回到了星界中的主基地。脚下是粗粝的,遍布碎石的土地，眺望远处可以看到璀璨的星云，据说这是来自巨神峰山脚的景象。
+你位于巨神峰临时营地，索拉卡恢复了你的队伍，现在可以前往其他地区拜访或调整队伍，出门探索。
+<<addStates "energy" $states.energy.max>> */
+[[前往储物处|Storage]]
+[[调整队伍|TeamManagement]]
+[[准备出发|PrepareToDepart]]
+
+:: TeamManagement {"position":"475,150","size":"100,100"}
+
+:: PrepareToDepart {"position":"475,150","size":"100,100"}

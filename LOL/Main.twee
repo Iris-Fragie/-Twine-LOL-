@@ -1,0 +1,1501 @@
+:: StoryTitle
+LOL
+
+:: StoryData
+{
+  "ifid": "81274A4A-B097-4ADF-AEE3-D4C9974A546A",
+  "format": "SugarCube",
+  "format-version": "2.37.3",
+  "start": "篝火",
+  "tag-colors": {
+    "noreturn": "orange",
+    "widget": "blue",
+    "nobr": "purple"
+  },
+  "zoom": 1
+}
+
+:: StoryCaption {"position":"750,50","size":"100,100"}
+<<for _key, _state range $states>>
+  <font color="gold">_state.name：</font>
+  <<showProgress _key>>
+<</for>>
+<hr style="border: none; border-top: 1px solid white; margin: 1px;"><<timeWidget>> - $showHour : $formattedMinute<br><hr style="border: none; border-top: 1px solid white; margin: 0;">
+金钱：<span id="money-display">$Money</span> <br>
+名声：$MissionStats.Fame | 活跃委托：<<= $ActiveMissions.length >>/$MaxActiveMissions<br>
+等级: @@#level;<<= $level>>@@ (XP: @@#xp;<<= $xp>>@@ / 距离下一级: @@#xp-to-next;<<= $xpToNext>>@@)
+
+:: StoryInit {"position":"625,50","size":"100,100"}
+//主角
+<<set $player={
+name:"召唤师",
+sanValue: 100,
+}>>
+<<set $level to 1>>
+<<set $xp to 0>>
+<<set $xpToNext to 50>>
+<<set $states = {
+    energy: { name: "体力", value: 50, max: 100 },
+
+}>>
+
+//独特食物追踪系统
+<<set $uniqueFoodsEaten to []>>  /*已吃过的独特食物列表*/
+<<set $foodMilestonesReached to 0>>  /*已达到的里程碑次数（每5个独特食物）*/
+
+/*这里修改侧边数值条颜色档位和数值，要确保这两个一致*/
+<<set $rangesProgress=[20,40,60,80,90,100]>>
+<<set $colorProgress=["#EF303B", "#FF6090", "#FFCC4C", "#d1bdff", "#19AAD1", "#92d618"]>>
+/*<<run console.log($colorProgress)>>*/	
+
+
+//测试角色与队伍
+<<set $teamList to ["向日葵"]>>
+
+<<set $testCharA = {name : "向日葵",tie : 3,juqing : ["测试剧情1", "测试剧情2"]}>>
+
+
+//测试背包，库存与商店
+//新建玩家，商店和库存的inventory
+<<newinv $player>>
+<<newinv $shop>>
+<<newinv $storage>>
+
+<<set $Money to 100>>
+//新建物品
+<<item "coal" "Coal">><<tags "ore">><</item>>
+<<item "iron_ingot" "Iron Ingot">><<tags "ore">><</item>>
+<<item "glass_shard" "Glass Shard">><<tags "crafting">><</item>>
+<<item "gold_nugget" "Gold Nugget">><<tags "ore">><</item>>
+<<item "pretty_stone" "Pretty Stone">><<tags "decoration">><</item>>
+<<item "gemstone" "Gemstone">><<tags "crafting">><</item>>
+<<consumable "apple" "苹果">><<tags "food">><</consumable>>
+<<consumable "wild_berry" "野莓">><<tags "food">><</consumable>>
+<<consumable "berry_choc" "莓果巧克力">><<tags "food">><</consumable>>
+<<consumable "banana_choc" "香蕉巧克力">><<tags "food">><</consumable>>
+<<consumable "apple_choc" "苹果巧克力">><<tags "food">><</consumable>>
+<<consumable "fruit_salad" "水果沙拉">><<tags "food">><</consumable>>
+<<consumable "roast_chicken" "烤鸡">><<tags "food">><</consumable>>
+<<consumable "meat_stew" "肉类炖菜">><<tags "food">><</consumable>>
+<<consumable "mixed_vegetable_soup" "杂烩蔬菜汤">><<tags "food">><</consumable>>
+<<consumable "energy_drink_lemon" "柠檬味能量饮">><<tags "food">><</consumable>>
+<<consumable "fried_skewers_chicken_wings" "鸡翅炸串">><<tags "food">><</consumable>>
+
+// 食物体力恢复表
+<<set setup.foodEnergy = {
+    apple: 12,
+    wild_berry: 8,
+    berry_choc: 14,
+    banana_choc: 14,
+    apple_choc: 12,
+    fruit_salad: 16,
+    roast_chicken: 35,
+    meat_stew: 30,
+    mixed_vegetable_soup: 22,
+    energy_drink_lemon: 18,
+    fried_skewers_chicken_wings: 25
+}>>
+
+
+//设置物品价格：
+<<set setup.prices = new Map([
+    ["gemstone", 35],
+    ["coal", 2],
+    ["iron_ingot", 12],
+    ["glass_shard", 5],
+    ["gold_nugget", 50],
+    ["pretty_stone", 3],
+    ["apple", 5],
+    ["wild_berry", 4],
+    ["berry_choc", 10],
+    ["banana_choc", 10],
+    ["apple_choc", 8],
+    ["fruit_salad", 15],
+    ["roast_chicken", 25],
+    ["meat_stew", 30],
+    ["mixed_vegetable_soup", 20],
+    ["energy_drink_lemon", 12],
+    ["fried_skewers_chicken_wings", 18]
+])>>
+//给与对应inventory 物品
+<<set $currentCategory to "all">>
+<<pickup $shop "coal" 10 "gold_nugget" 2 "iron_ingot" 5>>
+<<pickup $storage "iron_ingot" 1 "glass_shard" 20>>
+<<pickup $player "glass_shard" 10 "pretty_stone" 20 "gemstone" 5 "apple" 10 "wild_berry" 5 "berry_choc" 2>>
+
+//===== 任务系统初始化 =====
+/* 时间 */
+<<set $minute = 0>>
+<<set $hour = 8>>
+<<set $day = 1>>
+<<set $weekDay = 1>>
+<<set $month = 1>>
+<<set $year = 1>>
+<<set $showMinute = 0>>
+<<set $showHour = 8>>
+<<set $formattedMinute = 0>>
+
+//多任务系统数据结构
+<<set $MissionStats to {
+  "Success": 0,     /*成功次数*/
+  "Total": 0,       /*总任务数*/
+  "Failure": 0,     /*失败次数*/
+  "Fame": 0         /*名声值*/
+}>>
+
+//活跃委托任务队列
+<<set $ActiveMissions = []>>
+
+//委托任务预览
+<<set $MissionPreview = "">>
+
+//委托任务预览数据（用于保存动态生成的任务数据）
+<<set $MissionPreviewData = {}>>
+
+//最大可同时进行的委托任务数
+<<set $MaxActiveMissions = 3>>
+
+//主线任务系统
+<<set $MainMission = {
+  "id": "main_1",           /*主线任务ID*/
+  "name": "第一章：起航",   /*主线任务名称*/
+  "currentStage": 0,        /*当前阶段索引*/
+  "complete": false,        /*是否完成*/
+  "stages": [
+    { id: "1-1", name: "与NPC对话", complete: false, description: "找到村长了解情况" },
+    { id: "1-2", name: "收集线索", complete: false, description: "收集三个线索物品" },
+    { id: "1-3", name: "做出决定", complete: false, description: "根据线索做出选择" }
+  ]
+}>>
+
+<<set $MissionSet1 to ["K", "L"]>>
+<<set $MissionSet2 to ["K", "L"]>>
+<<set $MissionSet3 to ["K", "L"]>>
+<<set $MissionToday to ["K", "L"]>>
+
+//任务奖励配置（收集任务使用动态奖励，不需要在此配置）
+<<set setup.missionRewards = {}>>
+
+//任务配置（显示名称和类型）
+<<set setup.missionConfig = {
+    K: { name: "收集苹果", type: "collect", itemId: "apple", itemName: "苹果" },
+    L: { name: "收集野莓", type: "collect", itemId: "wild_berry", itemName: "野莓" }
+}>>
+
+//收集类任务配置（可扩展）
+<<set setup.collectMissions = {
+    K: { itemId: "apple", itemName: "苹果", minCount: 2, maxCount: 5, rewardPerItem: 7 },
+    L: { itemId: "wild_berry", itemName: "野莓", minCount: 5, maxCount: 7, rewardPerItem: 6 }
+}>>
+
+// 地点与事件配置（支持多事件独立概率）
+<<set setup.locations = {
+    small_forest: {
+        id: "small_forest",
+        name: "小森林",
+        terrain: "forest",
+        description: "一个充满生机的小森林，绿树成荫。",
+        collectibles: [ { itemId: "apple", min: 1, max: 3, chance: 80 } ],
+        events: [
+            { id: "apple_tree_ripe", chance: 80 },
+            { id: "forest_merchant", chance: 30 }
+        ]
+    },
+    valley: {
+        id: "valley",
+        name: "溪谷",
+        terrain: "river",
+        description: "溪流环绕的山谷。",
+        events: [ { id: "wild_berries", chance: 80 } ],
+        collectibles: [ { itemId: "berry", min: 1, max: 4, chance: 70 } ]
+    }
+}>>
+
+<<set setup.events = {
+    apple_tree_ripe: {
+        id: "apple_tree_ripe",
+        name: "苹果树成熟",
+        weight: 100,
+        passage: "事件：苹果树成熟"
+    },
+    forest_merchant: {
+        id: "forest_merchant",
+        name: "森林商人",
+        weight: 30,
+        passage: "事件：森林商人"
+    },
+    wild_berries: {
+        id: "wild_berries",
+        name: "野莓丛",
+        weight: 80,
+        passage: "事件：野莓丛"
+    }
+}>>
+
+// 地形消耗映射
+<<set setup.terrainCosts = {
+    forest: 5,
+    river: 8,
+    mountain: 10
+}>>
+
+// 当前地点与事件变量
+<<set $currentLocationId to null>>
+<<set $currentEventId to null>>
+<<set $currentEventPassage to null>>
+<<set $eventFlags to {}>>
+<<set $locationStates to {}>>
+
+
+
+
+//骰子战斗
+<<set setup.BattleSystem = {
+    /* 骰子面类型定义 */
+    DiceFaces: {
+        ATTACK: "attack",    // 攻击骰面
+        DEFEND: "defend",    // 防御骰面
+        SKILL: "skill",      // 技能骰面
+        EMPTY: "empty"       // 空骰面
+    },
+    
+    /* 基础骰子配置 - 6面骰子 */
+    BasicDice: ["attack", "attack", "defend", "skill", "empty", "empty"],
+    
+    /* 投掷骰子 */
+    rollDice: function() {
+        var faces = this.BasicDice;
+        var index = Math.floor(Math.random() * faces.length);
+        return faces[index];
+    },
+    
+    /* 执行骰子行动 */
+    executeDiceAction: function(face) {
+        var log = [];
+        switch(face) {
+            case this.DiceFaces.ATTACK:
+                var damage = 1;
+                $battle.enemy.hp -= damage;
+                log.push("骰子显示【攻击】！对" + $battle.enemy.name + "造成了" + damage + "点伤害！");
+                break;
+            case this.DiceFaces.DEFEND:
+                var shield = 1;
+                $battle.player.shield += shield;
+                log.push("骰子显示【防御】！获得了" + shield + "点护盾！");
+                break;
+            case this.DiceFaces.SKILL:
+                // 技能骰面 - 让玩家选择攻击或防御
+                return "skill_choice";
+            case this.DiceFaces.EMPTY:
+                log.push("骰子显示【空白】...什么都没发生。");
+                break;
+        }
+        return log;
+    },
+    
+    /* 敌人行动 */
+    enemyAction: function() {
+        var log = [];
+        if ($battle.enemy.hp <= 0) return log;
+        
+        // 史莱姆每回合造成1点伤害
+        var damage = $battle.enemy.damage;
+        var actualDamage = damage;
+        
+        if ($battle.player.shield > 0) {
+            if ($battle.player.shield >= damage) {
+                $battle.player.shield -= damage;
+                actualDamage = 0;
+                log.push($battle.enemy.name + "攻击了你，但被护盾完全抵挡！(剩余护盾: " + $battle.player.shield + ")");
+            } else {
+                actualDamage = damage - $battle.player.shield;
+                log.push($battle.enemy.name + "攻击了你，护盾抵挡了" + $battle.player.shield + "点伤害！");
+                $battle.player.shield = 0;
+                $battle.player.hp -= actualDamage;
+                log.push("你受到了" + actualDamage + "点伤害！");
+            }
+        } else {
+            $battle.player.hp -= damage;
+            log.push($battle.enemy.name + "攻击了你，造成了" + damage + "点伤害！");
+        }
+        
+        return log;
+    },
+    
+    /* 检查战斗是否结束 */
+    checkBattleEnd: function() {
+        if ($battle.player.hp <= 0) {
+            return "defeat";
+        }
+        if ($battle.enemy.hp <= 0) {
+            return "victory";
+        }
+        return null;
+    }
+}>>
+
+/* 新战斗系统配置 */
+<<set setup.Enemies = {
+    slime: {
+        id: "slime",
+        name: "史莱姆",
+        maxHp: 5,
+        attack: 1,
+        defense: 0,
+        special: null,
+        speed: 5,
+        description: "软绵绵的史莱姆，看起来很弱小。"
+    }
+}>>
+
+<<set setup.DiceEffects = {
+    attack: {name: "攻击", damage: 1},
+    special_lifesteal: {name: "狂野冲刺", damage: 6, heal: 3},
+    special_heal: {name: "冥想", heal: 7, damageReduction: 0.5},
+    special_block: {name: "刀锋旋舞", perfectBlock: true},
+    defend: {name: "防御", teamShield: 1},
+    empty: {name: "空白"}
+}>>
+
+<<set setup.Heroes = {
+    Master_Yi: {
+        id: "Master_Yi",
+        name: "易大师",
+        maxHp: 50,
+        level: 1,
+        attack: 3,
+        defense: 0,
+        speed: 10,
+        diceSet: [
+            {
+                faces: 6,
+                content: ["attack", "attack", "attack", "special_heal", "defend", "special_heal"]
+            }
+        ]
+    },
+    Samira: {
+        id: "Samira",
+        name: "莎弥拉",
+        maxHp: 45,
+        level: 1,
+        attack: 4,
+        defense: 0,
+        speed: 8,
+        diceSet: [
+            {
+                faces: 6,
+                content: ["attack", "attack", "special_block", "defend", "special_lifesteal", "empty"]
+            }
+        ]
+    }
+}>>
+
+/* 初始化玩家英雄状态（保存当前血量等动态数据） */
+<<set $heroStates to {
+    Master_Yi: {
+        hp: 1,
+        maxHp: 1,
+        level: 1
+    },
+    Samira: {
+        hp: 1,
+        maxHp: 1,
+        level: 1
+    }
+}>>
+
+/* 初始化玩家队伍 */
+<<set $playerHeroes to ["Master_Yi", "Samira"]>>
+
+
+:: StoryMenu {"position":"1225,50","size":"100,100"}
+<<link"星灵的礼物">>
+  <<run openDailyGiftDialog()>>
+<</link>>
+
+<<link"检查成就状态">>
+  <<script>>
+    Dialog.create("检查成就状态");
+    Dialog.wikiPassage("check");
+    Dialog.open();
+  <</script>>
+<</link>>
+<<link "背包">>
+    <<run Dialog.setup("Inventory", "inventory"); Dialog.wiki(Story.get("Inventory").text); Dialog.open()>>
+<</link>>
+
+<<link "召唤之书">>
+	<<run multiplePopUpTab("page1", "1")>> //多页面弹窗测试，需要修改得进js
+<</link>>
+
+
+:: 成就test {"position":"1525,50","size":"100,100"}
+此处会获得成就
+[[回到篝火|篝火]]
+
+:: 未命名片段 {"position":"375,250","size":"100,100"}
+<<linkreplace "问他为什么">>
+文本1
+<</linkreplace>>
+<<linkreplace "沉默不语">> 
+文本
+<</linkreplace>>
+
+
+:: 测试剧情1 {"position":"900,475","size":"100,100"}
+<<storytree tree1>>
+[
+    {
+        "id": "start",
+        "text": "你好，这是一个测试对话。好感度为$testCharA.tie。",
+        "choices": [
+            {
+                "text": "我想测试条件判断 (需要好感>2)",
+                "nextId": "条件测试",
+                "condition": "$testCharA.tie > 2"
+            },
+            {
+                "text": "我想测试标记系统",
+                "nextId": "标记测试",
+                "click": "<<toggle_flag _tree2 '已打招呼'>>"
+            },
+            {
+                "text": "我想测试变量系统",
+                "nextId": "变量测试"
+            },
+            {
+                "text": "好感+1",
+                "nextId": "start",
+                "click": "<<set $testCharA.tie +=1>>"
+            }
+        ]
+    },
+    {
+        "id": "条件测试",
+        "text": "你通过了条件检查！",
+        "choices": [
+            {
+                "text": "返回开始",
+                "nextId": "start"
+            }
+        ]
+    },
+    {
+        "id": "标记测试",
+        "text": "让我们看看你是否有'已打招呼'的标记。\n<<if setup.hasFlag('tree2','已打招呼')>>你确实有这个标记！<<else>>你还没有这个标记。<</if>>",
+        "choices": [
+            {
+                "text": "返回开始",
+                "nextId": "start"
+            }
+        ]
+    },
+    {
+        "id": "变量测试",
+        "text": "让我们设置一些变量。",
+        "choices": [
+            {
+                "text": "设置临时变量",
+                "nextId": "start",
+                "click": "<<set_tmp _tree2 'testTemp' true>>"
+            },
+            {
+                "text": "设置持久变量",
+                "nextId": "start",
+                "click": "<<set_var _tree2 'testVar' 100>>"
+            }
+        ]
+    }
+]
+<</storytree>>
+
+
+:: 测试剧情2 {"position":"925,325","size":"100,100"}
+你好，这里是测试剧情2
+哇哦
+[[返回篝火|篝火]]
+
+:: 悬停测试 {"position":"825,325","size":"100,100"}
+<div class="hover"><<nobr>>
+<u>显示给玩家的内容</u>
+<span class="hoverblock">
+说明框内的内容
+</span>
+<</nobr>></div>
+
+:: 测试成就 {"position":"1625,50","size":"100,100"}
+<<link"跳转到test""成就test">><<achievement "成就ID20">><</link>>
+
+
+:: 篝火 {"position":"625,350","size":"100,100"}
+“欢迎来到篝火，你可以在这里恢复体力等”
+[[森林]]
+
+
+[[悬停测试|悬停测试]]
+
+[[任务委托|任务委托列表]]
+<<link"跳转到成就test""成就test">><<achievement "成就ID20">><</link>>
+<<link"镀金票券抽奖（当前票券：$goldTickets张）""镀金抽奖">><</link>>
+[[Go to the map|Map]]
+[[回到基地|主基地]]
+<img src="img/aaa.jpg">
+<<if $teamList.includes("向日葵") && $testCharA.tie >= 1 && not hasVisited('测试剧情1')>>
+[[好感为1，进入测试剧情1|对话1]]
+<</if>>
+<<if $teamList.includes("向日葵") && $testCharA.tie >= 2 && not hasVisited('测试剧情2')>>
+[[好感为2，进入测试剧情2|测试剧情2]]
+<</if>>
+
+
+
+
+
+:: StoryScript [script]
+/* twine-user-script #1: "simple-inventory.js" */
+// Simple Inventory, for SugarCube 2, by Chapel
+// v3.0.1, 2024-07-22, 8c9749dbafa5f12948d743a8dedd4e1c74bb9e26
+;"use strict";function _typeof(t){return _typeof="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(t){return typeof t}:function(t){return t&&"function"==typeof Symbol&&t.constructor===Symbol&&t!==Symbol.prototype?"symbol":typeof t},_typeof(t)}function _classCallCheck(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}function _defineProperties(t,e){for(var n=0;n<e.length;n++){var i=e[n];i.enumerable=i.enumerable||!1,i.configurable=!0,"value"in i&&(i.writable=!0),Object.defineProperty(t,_toPropertyKey(i.key),i)}}function _createClass(t,e,n){return e&&_defineProperties(t.prototype,e),n&&_defineProperties(t,n),Object.defineProperty(t,"prototype",{writable:!1}),t}function _toPropertyKey(t){var e=_toPrimitive(t,"string");return"symbol"==_typeof(e)?e:String(e)}function _toPrimitive(t,e){if("object"!=_typeof(t)||!t)return t;var n=t[Symbol.toPrimitive];if(void 0!==n){var i=n.call(t,e||"default");if("object"!=_typeof(i))return i;throw new TypeError("@@toPrimitive must return a primitive value.")}return("string"===e?String:Number)(t)}!function(){var t={description:"",handler:null,displayName:"",consumable:!0,unique:!1,permanent:!1},e=new Map,n=function(){function n(){var e=arguments.length>0&&void 0!==arguments[0]?arguments[0]:"",i=arguments.length>1&&void 0!==arguments[1]?arguments[1]:clone(t),r=arguments.length>2&&void 0!==arguments[2]?arguments[2]:[];if(_classCallCheck(this,n),!e||"string"!=typeof e)throw new Error("invalid item ID");if("object"!==_typeof(i))throw new Error("invalid item definition");Object.assign(this,Object.assign({},t,i)),this.id=e,this._tags=r instanceof Array?r:"string"==typeof r?[r]:[]}return _createClass(n,[{key:"tags",get:function(){return this._tags}},{key:"hasTag",value:function(t){return this._tags.includes(t)}},{key:"hasAllTags",value:function(){return this._tags.includesAll([].slice.call(arguments).flat(1/0))}},{key:"hasAnyTags",value:function(){return this._tags.includesAny([].slice.call(arguments).flat(1/0))}},{key:"name",get:function(){return this.displayName||this.id},set:function(t){this.displayName=t}},{key:"use",value:function(){return"string"==typeof this.handler?$.wiki(this.handler):"function"==typeof this.handler&&this.handler(this),this}},{key:"inspect",value:function(){return Dialog.setup(this.name,"simple-inventory item-description"),Dialog.wiki(this.description),Dialog.open(),this}}],[{key:"is",value:function(t){return t instanceof n}},{key:"add",value:function(t,i,r){var a=new n(t,i,r);return e.set(t,a),a}},{key:"get",value:function(t){return e.get(t)}},{key:"has",value:function(t){return e.has(t)}},{key:"list",get:function(){return e}}]),n}();setup.Item=n,window.Item=window.Item||n}(),function(){var t=setup.Item,e=!1,n="&hellip;",i={inspect:"Inspect",use:"Use",drop:"Drop",stack:"stack",take:"Take",give:"Give",stackPre:"&nbsp;&times;&nbsp;",stackPost:"&nbsp;"},r={};function a(e){return t.has(e)&&t.get(e).unique}var s=function(){function s(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:{},e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:[];_classCallCheck(this,s),this.data=clone(t),this._tags=e instanceof Array?e:"string"==typeof e?[e]:[]}return _createClass(s,[{key:"emit",value:function(t){var e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:{};return s.emit(t,this,e),this}},{key:"array",get:function(){var t=this,e=[];return Object.keys(this.data).forEach((function(n){if(e.push(n),t.data[n]>1)for(var i=1;i<t.data[n];i++)e.push(n)})),e}},{key:"list",get:function(){return Object.keys(this.data)}},{key:"length",get:function(){return this.array.length}},{key:"uniqueLength",get:function(){return this.list.length}},{key:"table",get:function(){return this.data}},{key:"tags",get:function(){return this._tags}},{key:"hasTag",value:function(t){return this._tags.includes(t)}},{key:"hasAllTags",value:function(){return this._tags.includesAll([].slice.call(arguments).flat(1/0))}},{key:"hasAnyTags",value:function(){return this._tags.includesAny([].slice.call(arguments).flat(1/0))}},{key:"count",value:function(t){return t?this.data[t]||0:this.length}},{key:"has",value:function(t){var e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:1;return this.data[t]>=e}},{key:"hasAll",value:function(){var t=this;return[].slice.call(arguments).flat(1/0).every((function(e){return t.has(e)}))}},{key:"hasAny",value:function(){var t=this;return[].slice.call(arguments).flat(1/0).some((function(e){return t.has(e)}))}},{key:"compare",value:function(t){var e=this,n=s.itemset(t);return Object.keys(n).every((function(t){return e.has(t,n[t])}))}},{key:"merge",value:function(t){var e=this,n=s.itemset(t);return Object.keys(n).forEach((function(t){s.change(e,t,n[t])})),n}},{key:"unmerge",value:function(t){var e=this,n={},i=s.itemset(t);return Object.keys(i).forEach((function(t){e.has(t,i[t])?n[t]=i[t]:e.has(t)&&(n[t]=e.count(t)),s.change(e,t,i[t],!0)})),n}},{key:"pickup",value:function(){var t=this.merge(s.parseArgList.apply(null,arguments));return this.emit("update",{delta:t}),this}},{key:"drop",value:function(){var t=this.unmerge(s.parseArgList.apply(null,arguments));return this.emit("update",{delta:t}),this}},{key:"empty",value:function(){var t=clone(this.data);return this.data={},this.emit("update",{delta:t}),this}},{key:"transfer",value:function(t){var e=s.parseArgList.apply(null,[].slice.call(arguments).slice(1));if(!s.is(t))throw new TypeError("target inventory is not an inventory instance");var n=this.unmerge(e);return t.merge(n),this.emit("update",{target:t,delta:n}),this}},{key:"isEmpty",value:function(){return 0===this.length}},{key:"iterate",value:function(t){var e=this;return"function"!=typeof t||this.list.forEach((function(n){t(n,e.data[n])})),this}},{key:"use",value:function(e){if(t.has(e)){var n=t.get(e);if(n.use(),n.consumable){s.change(this,e,1,!0);var i={};i[e]=1,this.emit("update",{delta:i})}return this.emit("use",{item:n}),this}}},{key:"clone",value:function(){return new s(this.data||{},this._tags||[])}},{key:"toJSON",value:function(){return JSON.reviveWrapper("new setup.Inventory("+JSON.stringify(this.data)+", "+JSON.stringify(this._tags)+")")}}],[{key:"confirm",get:function(){return e},set:function(t){e="string"==typeof t&&"all"===t.trim().toLowerCase()?"all":"string"==typeof t&&"stack"===t.trim().toLowerCase()?"stack":!!t}},{key:"emptyMessage",get:function(){return n},set:function(t){"string"==typeof t&&(n=t)}},{key:"strings",get:function(){return Object.assign(clone(i),r)},set:function(t){"object"===_typeof(t)&&(r=Object.assign(r,clone(t)))}},{key:"change",value:function(e,n){var i=arguments.length>2&&void 0!==arguments[2]?arguments[2]:1,r=arguments.length>3&&void 0!==arguments[3]&&arguments[3];if(0!==i){if(e instanceof s&&(e=e.data),"object"!==_typeof(e)){if(e)throw new TypeError("cannot access inventory data");e={}}if(!(o=n)||"string"!=typeof o||!o.trim())throw new TypeError("invalid item name/id");var o;if("number"==typeof i&&!Number.isNaN(i)&&Number.isInteger(i)||(i=1),r&&(i*=-1),i>0){if(Object.keys(e).includes(n)&&a(n))return;i>1&&a(n)&&(i=1),Object.keys(e).includes(n)||(e[n]=0),e[n]+=i}else{if(function(e){return t.has(e)&&t.get(e).permanent}(n))return;Object.keys(e).includes(n)&&"number"==typeof e[n]&&(e[n]+=i),e[n]<=0&&delete e[n]}return e}}},{key:"itemset",value:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:{};if(s.is(t)&&(t=t.data),"object"!==_typeof(t))return{};var e={};return Object.keys(t).forEach((function(n){"number"==typeof t[n]&&Number.isInteger(t[n])&&0!==t[n]&&(e[n]=t[n])})),e}},{key:"parseArgList",value:function(){var t=[].slice.call(arguments).flat(1/0);if(t.length%2!=0)throw new Error("item sets should be pairs of item IDs and numbers");var e={};return t.forEach((function(n,i){i%2==0&&(e[n]=t[i+1])})),e}},{key:"is",value:function(t){return t instanceof s}},{key:"emit",value:function(t,e){var n=arguments.length>2&&void 0!==arguments[2]?arguments[2]:{};$(document).trigger(Object.assign({type:":inventory-"+t+".simple-inventory",inventory:e,target:null,delta:{},item:null},n))}},{key:"create",value:function(t,e){return new s(t,e)}}]),s}();setup.Inventory=s,window.Inventory=window.Inventory||s}(),function(){var t=setup.Item,e=setup.Inventory;function n(t){var n=arguments.length>1&&void 0!==arguments[1]?arguments[1]:null,i=arguments.length>2&&void 0!==arguments[2]&&arguments[2],r=arguments.length>3&&void 0!==arguments[3]?arguments[3]:"Alert",a=arguments.length>4&&void 0!==arguments[4]?arguments[4]:"Are you sure?";if(!t||"function"!=typeof t)throw new Error("Invalid confirmation callback!");if(e.confirm)if("all"!==e.confirm||"all"===i)if("stack"!==e.confirm||i){var s={display:"inline-block",float:"right"},o=$(document.createElement("div")),u=$(document.createElement("p")).append(a),l=$(document.createElement("div")).addClass("confirmation-buttons"),c=$(document.createElement("button")).append("Okay").addClass("confirm-yes").css(Object.assign(s,{"margin-right":"0.5rem"})),d=$(document.createElement("button")).append("Cancel").addClass("confirm-no").css(s);t&&"function"==typeof t&&c.ariaClick(t),n&&"function"==typeof n&&d.ariaClick(n),l.append(d,c),o.append(u,l),Dialog.setup(r,"simple-inventory confirmation"),Dialog.append(o),Dialog.open()}else t();else t();else t()}function i(t){var e=$(document.createElement("span")).addClass("spacer");return t&&e.wiki(""+t),e}function r(t,i){var r=arguments.length>2&&void 0!==arguments[2]&&arguments[2],a=arguments.length>3&&void 0!==arguments[3]?arguments[3]:null;return"give"===String(i).toLowerCase().trim()?i=e.strings.give:"take"===String(i).toLowerCase().trim()?i=e.strings.take:i&&"drop"!==String(i).toLowerCase().trim()||(i=e.strings.drop),$(document.createElement(r?"button":"a")).addClass("all-link drop-link").wiki(i+" all").ariaClick((function(){t.isEmpty()||n((function(){a&&e.is(a)?(a.merge(t),t.empty()):t.empty(),Dialog.close()}),(function(){Dialog.close()}),!0)}))}function a(a){var s,o=arguments.length>1&&void 0!==arguments[1]?arguments[1]:{description:!0,use:!0,transfer:null,drop:!0,all:!0,stack:!0,dropActionText:"",classes:""},u=$(document.createElement("ul")).addClass("simple-inventory-list");if(a.length){if(s=a.list.map((function(r){var s=[],u=r;t.has(r)&&(u=t.get(r).name),o.description&&t.has(r)&&t.get(r).description?s.push(function(n,i,r){var a=arguments.length>3&&void 0!==arguments[3]&&arguments[3];return r=r||e.strings.inspect,$(document.createElement(a?"button":"a")).addClass("inspect-link").wiki(""+r).ariaClick((function(){t.get(i).inspect()}))}(a,r,u)):s.push($(document.createElement("span")).append(t.has(r)?t.get(r).name:r).addClass("item-name")),s.push(function(t,n,i,r){var a=$(document.createElement("span")),s=t.count(n);return i=i||e.strings.stackPre,r=r||e.strings.stackPost,1==s?a.addClass("item-count single"):a.addClass("item-count multi"),a.append(""+i+(s||0)+r)}(a,r)),o.use&&t.has(r)&&t.get(r).handler?s.push(function(t,n,i){var r=arguments.length>3&&void 0!==arguments[3]&&arguments[3];return i=i||e.strings.use,$(document.createElement(r?"button":"a")).addClass("use-link").wiki(""+i).ariaClick((function(){t.use(n)}))}(a,r)):s.push(i()),(o.transfer&&e.is(o.transfer)||o.drop)&&!function(e){return t.has(e)&&t.get(e).permanent}(r)?(s.push(function(t,i,r){var a=arguments.length>3&&void 0!==arguments[3]&&arguments[3],s=arguments.length>4&&void 0!==arguments[4]?arguments[4]:null;return"give"===String(r).toLowerCase().trim()?r=e.strings.give:"take"===String(r).toLowerCase().trim()?r=e.strings.take:r&&"drop"!==String(r).toLowerCase().trim()||(r=e.strings.drop),$(document.createElement(a?"button":"a")).addClass("drop-link").wiki(""+r).ariaClick((function(){n((function(){s&&e.is(s)?t.transfer(s,i,1):t.drop(i,1),Dialog.close()}),(function(){Dialog.close()}))}))}(a,r,o.dropActionText,!1,o.transfer||null)),a.count(r)>1&&o.stack?s.push(function(t,i,r){var a=arguments.length>3&&void 0!==arguments[3]&&arguments[3],s=arguments.length>4&&void 0!==arguments[4]?arguments[4]:null;return"give"===String(r).toLowerCase().trim()?r=e.strings.give:"take"===String(r).toLowerCase().trim()?r=e.strings.take:r&&"drop"!==String(r).toLowerCase().trim()||(r=e.strings.drop),r=r+"&nbsp;"+e.strings.stack,$(document.createElement(a?"button":"a")).addClass("stack-link drop-link").wiki(""+r).ariaClick((function(){n((function(){s&&e.is(s)?t.transfer(s,i,t.count(i)):t.drop(i,t.count(i)),Dialog.close()}),(function(){Dialog.close()}))}))}(a,r,o.dropActionText,!1,o.transfer||null)):s.push(i())):s.push(i());var l=r.normalize().toLowerCase().replace(/\s+/g,"-");return $(document.createElement("li")).append(s).addClass("simple-inventory-listing").attr({"data-item-id":l,"data-keyword":u})})),o.all){var l=$(document.createElement("li")).addClass("all-listing simple-inventory-listing").append([i("&mdash;"),i(),i(),r(a,o.dropActionText,!1,o.transfer||null)]);s.push(l)}}else s=$(document.createElement("li")).addClass("simple-inventory-listing").append($(document.createElement("span")).wiki(e.emptyMessage));return u.append(s),u}e.prototype.interface=function(){var t,e=arguments.length>0&&void 0!==arguments[0]?arguments[0]:{},n=arguments.length>1&&void 0!==arguments[1]?arguments[1]:null,i=this,r=$(document.createElement("div")).addClass("simple-inventory-wrapper");return r.append(a(this,e)),$(document).on(":inventory-update.simple-inventory.gui-built-in",(function(){r.length?r.empty().append(a(i,e)):$(document).off(":inventory-update.simple-inventory.gui-built-in")})),n&&n instanceof $?t=n:n&&(t=$(n)),t&&r.appendTo(t),r}}(),function(){setup.Inventory,setup.Item;var t=".simple-inventory-userland",e=":inventory-update.simple-inventory"+t,n=":inventory-use.simple-inventory"+t;function i(t){return t&&"function"==typeof t}Object.assign(setup.Inventory,{events:{update:{on:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:null,n=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"";i(t)&&$(document).on(e+n,t)},one:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:null,n=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"";i(t)&&$(document).one(e+n,t)},off:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:"";$(document).off(e+t)}},use:{on:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:null,e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"";i(t)&&$(document).on(n+e,t)},one:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:null,e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"";i(t)&&$(document).one(n+e,t)},off:function(){var t=arguments.length>0&&void 0!==arguments[0]?arguments[0]:"";$(document).off(n+t)}}}})}(),function(){var t=":";function e(e){var n=function(t){return t.replace(/\r+/g,"\n").replace(/\n+/,"\n").replace(/ +/g," ").trim().split(/\n/g)}(e),i={};return n.forEach((function(e){if(e&&e.trim()&&e.includes(t)){var n=e.trim().split(t);i[n[0].trim()]=n[1].trim()}})),i}var n=function(t){try{return Story.has(t)?e(Story.get(t).text):{}}catch(t){return console.error(t.message,t),{}}}("inventory.strings");n.empty&&"string"==typeof n.empty&&n.empty.trim()&&(setup.Inventory.emptyMessage=n.empty,delete n.empty),setup.Inventory.strings=n||{}}(),function(){var t=setup.Item,e=setup.Inventory;function n(t){return t&&"string"==typeof t&&t.length>=2&&("$"===t[0]||"_"===t[0])}function i(t){if(n(t)&&(t=State.getVar(t)),e.is(t))return t}Macro.add(["item","consumable"],{tags:["description","tags","unique","permanent"],handler:function(){var e,n,i,r,a=null,s=!1,o=!1,u=!1;if(State.length>0)return this.error("items must be defined in `StoryInit` or story JavaScript!");if(!this.args[0]||"string"!=typeof this.args[0]||!this.args[0].trim())return this.error("invalid item ID");if(e=this.args[0].trim(),"consumable"===this.name&&(a=this.payload[0].contents||null,s=!0),this.args[1]&&(n=this.args[1]),this.payload.length>1){var l=this.payload.find((function(t){return"description"===t.name})),c=this.payload.find((function(t){return"tags"===t.name})),d=this.payload.find((function(t){return"unique"===t.name})),f=this.payload.find((function(t){return"permanent"===t.name}));l&&(i=l.contents.trim()),c&&(r=c.args.flat(1/0)),d&&(o=!0),f&&(u=!0)}t.add(e,{displayName:n||"",description:i||"",handler:a,consumable:s,unique:o,permanent:u},r)}}),Macro.add("newinv",{handler:function(){var t=this.args.raw.trim().split(" ").first().replace(/["']/g,"").trim();if(!n(t))return this.error("argument must be a story or temporary variable!");State.setVar(t,new e({},this.args.flat(1/0).slice(1)))}}),Macro.add(["pickup","drop"],{handler:function(){var t=i(this.args[0]);return t?this.args.length<3?this.error("no items to pick up were provided"):void t[this.name](this.args.slice(1)):this.error("first argument must be a valid inventory!")}}),Macro.add("dropall",{handler:function(){var t=i(this.args[0]);if(!t)return this.error("first argument must be a valid inventory!");t.empty()}}),Macro.add(["transfer","merge","unmerge"],{handler:function(){var t=i(this.args[0]);if(!t)return this.error("first argument must be a valid inventory!");var e=i(this.args[1]);if(!e)return this.error("second argument must be a valid inventory!");if("transfer"===this.name){if(this.args.length<4)return this.error("no items to transfer were provided");t.transfer(e,this.args.slice(2))}else t[this.name](e)}}),Macro.add(["inv","take","give"],{handler:function(){var t=null,n=i(this.args[0]);if(!n)return this.error("first argument must be a valid inventory!");this.args[1]&&i(this.args[1])&&(t=i(this.args[1]));var r={description:this.args.includesAny("inspect","description"),use:this.args.includes("use"),transfer:t,drop:this.args.includes("drop"),all:this.args.includes("all"),stack:this.args.includes("stack"),dropActionText:"inv"===this.name?"Drop":e.strings[this.name.trim().toLowerCase()],classes:"macro-".concat(this.name)};n.interface(r,$(this.output))}})}(),function(){var t=setup.Item,e=setup.Inventory;function n(t,e,n){if("object"!==_typeof(e))throw new TypeError("the extension should be a plain generic object holding the properties and methods you want to add");Object.keys(e).forEach((function(i){if(t[i]&&!n)throw new Error('Cannot override existing property "'+i+'"!');t[i]=e[i]}))}Object.assign(e,{extend:function(t){n(e,t,arguments.length>1&&void 0!==arguments[1]&&arguments[1])},extendPrototype:function(t){var i=arguments.length>1&&void 0!==arguments[1]&&arguments[1];n(e.prototype,t,i)}}),Object.assign(t,{extend:function(e){n(t,e,arguments.length>1&&void 0!==arguments[1]&&arguments[1])},extendPrototype:function(e){var i=arguments.length>1&&void 0!==arguments[1]&&arguments[1];n(t.prototype,e,i)}})}();
+// End Simple Inventory
+/* twine-user-script #2: "Story JavaScript" */
+Config.ui.stowBarInitially = false;
+
+//侧边栏显示hover属性
+setup.updateTooltip = function(stateId) {
+    $(document).on('mouseenter', '#bar-' + stateId, function(e) {
+        var states = State.variables.states[stateId];
+        var tooltip = $(this).find('.state-tooltip');
+        tooltip.text(states.value + '/' + states.max).show();
+    }).on('mousemove', '#bar-' + stateId, function(e) {
+        var tooltip = $(this).find('.state-tooltip');
+        var offset = $(this).offset();
+        tooltip.css({
+            left: e.pageX - offset.left,
+            top: e.pageY - offset.top - 30
+        });
+    }).on('mouseleave', '#bar-' + stateId, function() {
+        $(this).find('.state-tooltip').hide();
+    });
+};
+
+//noreturn
+$(document).on(':passagestart', function (ev) {
+    if (!ev.passage.tags.includes('noreturn')) {
+        State.variables.return = ev.passage.name;
+    }
+});
+
+// 事件选择：根据事件的 weight 进行加权随机选择
+setup.pickEventForLocation = function(locId) {
+    var loc = setup.locations[locId];
+    if (!loc || !loc.events || !loc.events.length) {
+        return null;
+    }
+    var list = loc.events;
+    var total = 0;
+    var weights = list.map(function(eid){
+        var w = (setup.events[eid] && setup.events[eid].weight) ? setup.events[eid].weight : 1;
+        total += w;
+        return w;
+    });
+    var r = Math.random() * total;
+    for (var i = 0; i < list.length; i++) {
+        if (r < weights[i]) {
+            return list[i];
+        }
+        r -= weights[i];
+    }
+    return list[0];
+};
+
+
+/* twine-user-script #1: "storytree.js" */
+/* StoryTree, Ver.0.1.9, By BlackStar */
+/// Build Date: 2025-01-24T20:25:19.582Z
+(()=>{(()=>{function e(t){return e="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(e){return typeof e}:function(e){return e&&"function"==typeof Symbol&&e.constructor===Symbol&&e!==Symbol.prototype?"symbol":typeof e},e(t)}function t(e,t){if(!(e instanceof t))throw new TypeError("Cannot call a class as a function")}function r(e,t){for(var r=0;r<t.length;r++){var s=t[r];s.enumerable=s.enumerable||!1,s.configurable=!0,"value"in s&&(s.writable=!0),Object.defineProperty(e,n(s.key),s)}}function s(e,t,s){return t&&r(e.prototype,t),s&&r(e,s),Object.defineProperty(e,"prototype",{writable:!1}),e}function n(t){var r=function(t,r){if("object"!=e(t)||!t)return t;var s=t[Symbol.toPrimitive];if(void 0!==s){var n=s.call(t,r||"default");if("object"!=e(n))return n;throw new TypeError("@@toPrimitive must return a primitive value.")}return("string"===r?String:Number)(t)}(t,"string");return"symbol"==e(r)?r:r+""}!function(){var e,r,a,i=new(function(){return s((function e(){t(this,e),this.placeholders={strings:new Map,comments:new Map,templates:new Map},this.patterns={comments:/(\/\*[\s\S]*?\*\/|\/\/.*)/g,templates:/(`(?:\\[\s\S]|[^\\`])*?`)/g,strings:/(["'])(?:\\.|[^\\])*?\1/g,replacements:[{pattern:/(?<=[\s\n\t{}()\[\],;<>!=+\-*/%:|&]|^)\$(\w+)\b/g,replace:function(e,t){return"SugarCube.State.variables.".concat(t)}},{pattern:/(?<=[\s\n\t{}()\[\],;<>!=+\-*/%:|&]|^)_(\w+)\b/g,replace:function(e,t){return"SugarCube.State.temporary.".concat(t)}},{pattern:/(?<=[\s\n\t{}()\[\],;<>!=+\-*/%:|&]|^)setup\b/g,replace:function(){return"SugarCube.setup"}}]}}),[{key:"createPlaceholder",value:function(e,t){var r=this.placeholders[e],s=r.size+1,n="@@".concat(e.toUpperCase(),"_").concat(s,"@@");return r.set(n,t),n}},{key:"replace",value:function(e,t,r){var s=this;return e.replace(t,(function(e){return s.createPlaceholder(r,e)}))}},{key:"restore",value:function(e,t){var r=this.placeholders[t];return e.replace(new RegExp("@@".concat(t.toUpperCase(),"_\\d+@@"),"g"),(function(e){return r.get(e)}))}},{key:"process",value:function(e){try{Object.values(this.placeholders).forEach((function(e){return e.clear()}));var t=e;return t=this.replace(t,this.patterns.comments,"comments"),t=this.replace(t,this.patterns.templates,"templates"),t=this.replace(t,this.patterns.strings,"strings"),this.patterns.replacements.forEach((function(e){var r=e.pattern,s=e.replace;t=t.replace(r,s)})),t=this.restore(t,"strings"),t=this.restore(t,"templates"),t=this.restore(t,"comments")}catch(t){return console.error("处理代码时发生错误:",t),e}}}])}()),o=function(){return s((function e(r){var s=this;t(this,e),this.nodes=new Map,r.forEach((function(e){try{e.choices&&(e.choices=e.choices.map((function(e){if(e.condition&&"string"==typeof e.condition){var t=i.process(e.condition);e.condition=new Function("flags","temp","vars","session","return ".concat(t))}return e}))),s.nodes.set(e.id,e)}catch(t){console.error("Error setting node:",e.id,t)}}))}),[{key:"getNode",value:function(e){return this.nodes.get(e)}},{key:"getAllNodes",value:function(){return Array.from(this.nodes.values())}}])}();e=o,a={},(r=n(r="trees"))in e?Object.defineProperty(e,r,{value:a,enumerable:!0,configurable:!0,writable:!0}):e[r]=a;var c=function(){function e(r){var s=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"start",n=arguments.length>2&&void 0!==arguments[2]?arguments[2]:e.progress(s);t(this,e),this.varname=r,this.start=s,this.progress=n}return s(e,[{key:"visit",value:function(){var e=arguments.length>0&&void 0!==arguments[0]?arguments[0]:null,t=arguments.length>1&&void 0!==arguments[1]?arguments[1]:0;return e=null!=e?e:this.progress.current,this.tree.nodes.has(e)?(this.progress.visits[e]=(this.progress.visits[e]||0)+t,this.progress.visits[e]):0}},{key:"tree",get:function(){var e=State.getVar(this.varname);if(!e)throw new Error("Tree ".concat(this.varname," not found"));return e}},{key:"current",get:function(){return this.tree.getNode(this.progress.current)},set:function(e){this.progress.current=e}},{key:"choices",get:function(){var e=this,t=this.current;return null!=t&&t.choices?t.choices.map((function(t,r){return{index:r,text:t.text,available:"function"!=typeof t.condition||t.condition(e.progress.state.flags,e.progress.state.temporary,e.progress.state.variables,e)}})).filter((function(e){return e.available})).map((function(e){return{index:e.index,text:e.text}})):[]}},{key:"isInStart",get:function(){return"start"===this.progress.current}},{key:"make",value:function(e){var t=this.current;if(null==t||!t.choices)return!1;var r=t.choices[e];return!(!r||r.condition&&!r.condition(this.progress.state.flags,this.progress.state.temporary,this.progress.state.variables,this))&&(r.click&&$.wiki(r.click),this.progress.current=r.nextId,this.progress.state.temporary={},this.visit(r.nextId,1),$(document).trigger("storytree:choice",{session:this,choice:r,index:e}),!0)}},{key:"clone",value:function(){return new e(this.varname,this.start,this.progress)}},{key:"toJSON",value:function(){return Serial.createReviver(String.format("new {0}({1},{2},{3})","setup.GameSession",JSON.stringify(this.varname),JSON.stringify(this.start),JSON.stringify(this.progress)))}}],[{key:"progress",value:function(e){return{current:e,state:{flags:[],temporary:{},variables:{}},visits:{}}}}])}();window.SCProcessor=window.SCProcessor||i,window.StoryTree=window.StoryTree||o,window.GameSession=window.GameSession||c,setup.StoryTree=o,setup.GameSession=c,setup.SCProcessor=i}()})(),(()=>{(function(){function getVarname(e){return e.raw.trim().split(" ")[0].replace(/["'$_]/g,"").trim()}function getSession(e){var t=State.getVar("$dialogue_sessions");return t||(t={},State.setVar("$dialogue_sessions",t)),t[e]}function hasFlag(e,t){var r=getSession(e.replace(/[$_]/,""));return!!r&&r.progress.state.flags.includes(t)}function getSVar(e,t){var r=getSession(e);return r?r.progress.state.variables[t]:null}function setSVar(e,t,r){var s=getSession(e);if(!s)return null;s.progress.state.variables[t]=r}function getSTmp(e,t){var r=getSession(e);return r?r.progress.state.temporary[t]:null}function setSTmp(e,t,r){var s=getSession(e);if(!s)return null;s.progress.state.temporary[t]=r}Macro.add("storytree",{tags:null,handler:function handler(){var varname=getVarname(this.args),content=this.payload[0].contents.trim(),contentWithBrackets=content.startsWith("[")?content:"[".concat(content,"]");eval("State.temporary.".concat(varname," = new setup.StoryTree(").concat(contentWithBrackets,");"))}}),Macro.add("dialogue",{handler:function(){if(this.args.length<1)return this.error("Dialogue: varname is required");var e=getVarname(this.args),t=this.args[1]||null,r=this.args[2]||null,s=this.args[3]||"start",n=State.getVar("$dialogue_sessions");n||(n={},State.setVar("$dialogue_sessions",n));var a=n[e];a||(a=new GameSession("_".concat(e),s),n[e]=a);var i=$("<div>").addClass("story-dialogue").attr("id",e),o=$("<div>").addClass("avatar"),c=$("<div>").addClass("name"),u=$("<div>").addClass("content"),l=$("<div>").addClass("choices");c.wiki(t),o.css("background-image","url(".concat(r,")")),u.wiki(a.current.text);var g=function(e){a.make(e),u.empty(),u.wiki(a.current.text),l.empty(),a.choices.forEach((function(e,t){$("<a>").addClass("dialogue-choice").wiki(e.text).on("click",(function(){return g(e.index)})).appendTo(l)}))};a.choices.forEach((function(e,t){$("<a>").addClass("dialogue-choice").wiki(e.text).on("click",(function(){return g(e.index)})).appendTo(l)})),a.isInStart&&a.visit(null,1),i.append(o,c,u,l).appendTo(this.output)}}),Macro.add(["reset_dialogue","reset_dlg"],{handler:function(){this.args.length<=0&&State.setVar("$dialogue_sessions",{});var e=State.getVar("$dialogue_sessions");e?this.args.forEach((function(t){e[t]&&delete e[t]})):State.setVar("$dialogue_sessions",{})}}),Macro.add("toggle_flag",{handler:function(){var e=getSession(getVarname(this.args));if(!e)return this.error("Dialogue: session not found");var t=this.args.slice(1),r=e.progress.state.flags;t.forEach((function(e){r.includes(e)?r.splice(r.indexOf(e),1):r.push(e)}))}}),Macro.add("push_flag",{handler:function(){var e=getSession(getVarname(this.args));if(!e)return this.error("Dialogue: session not found");var t=this.args.slice(1),r=e.progress.state.flags;t.forEach((function(e){r.includes(e)||r.push(e)}))}}),Macro.add("remove_flag",{handler:function(){var e=getSession(getVarname(this.args));if(!e)return this.error("Dialogue: session not found");var t=this.args.slice(1),r=e.progress.state.flags;t.forEach((function(e){r.includes(e)&&r.splice(r.indexOf(e),1)}))}}),Macro.add("set_tmp",{handler:function(){var e=getSession(getVarname(this.args));if(!e)return this.error("Dialogue: session not found");for(var t=this.args.slice(1),r=0;r<t.length;r+=2){var s=t[r],n=t[r+1];void 0!==n&&(e.progress.state.temporary[s]=n)}}}),Macro.add("set_var",{handler:function(){var e=getSession(getVarname(this.args));if(!e)return this.error("Dialogue: session not found");for(var t=this.args.slice(1),r=0;r<t.length;r+=2){var s=t[r],n=t[r+1];void 0!==n&&(e.progress.state.variables[s]=n)}}}),window.hasFlag=window.hasFlag||hasFlag,setup.hasFlag=hasFlag,window.getSVar=window.getSVar||getSVar,setup.getSVar=getSVar,window.setSVar=window.setSVar||setSVar,setup.setSVar=setSVar,window.getSTmp=window.getSTmp||getSTmp,setup.getSTmp=getSTmp,window.setSTmp=window.setSTmp||setSTmp,setup.setSTmp=setSTmp})()})()})();
+/* End StoryTree */
+/* twine-user-script #2: "index.js" */
+setup.getPrice = function(basePrice) {
+    if(hasFlag('_tree1','态度敌对')) {
+        return basePrice * 3;
+    } else if(hasFlag('_tree1','态度友好')) {
+        return Math.floor(basePrice * 0.7);
+    }
+    return basePrice;
+};
+
+setup.canTrade = function(basePrice) {
+    const finalPrice = setup.getPrice(basePrice);
+    if(hasFlag && hasFlag('_tree1','态度敌对')) {
+        return State.variables.caps >= finalPrice;
+    }
+    return !hasFlag('_tree1','态度敌对') || State.variables.caps >= finalPrice;
+};
+
+
+
+:: StoryStylesheet [stylesheet]
+/* 战斗界面样式
+*/
+.battle-container {
+    max-width: 900px;
+    margin: 20px auto;
+    padding: 20px;
+    background: #2a2a2a;
+    border-radius: 10px;
+    color: #fff;
+}
+
+.battle-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #444;
+}
+
+.energy-display {
+    font-size: 1.2em;
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+.monster-list, .hero-list {
+    margin: 20px 0;
+    padding: 15px;
+    background: #333;
+    border-radius: 8px;
+}
+
+.monster-card, .hero-card {
+    background: #444;
+    padding: 10px;
+    margin: 8px 0;
+    border-radius: 5px;
+    border-left: 4px solid #e74c3c;
+}
+
+.hero-card {
+    border-left-color: #3498db;
+}
+
+.monster-name, .hero-name {
+    font-size: 1.1em;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.monster-stats, .hero-stats {
+    font-size: 0.9em;
+    color: #aaa;
+}
+
+.hp-text {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+.battle-order {
+    margin-top: 20px;
+    padding: 15px;
+    background: #222;
+    border-radius: 8px;
+}
+
+.order-hero, .order-monster {
+    padding: 8px;
+    margin: 5px 0;
+    border-radius: 4px;
+}
+
+.order-hero {
+    background: #2980b9;
+}
+
+.order-monster {
+    background: #c0392b;
+}
+
+.dice-container {
+    margin: 20px 0;
+    min-height: 100px;
+}
+
+.dice-display {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin: 20px 0;
+}
+
+.dice-wrapper {
+    display: inline-block;
+}
+
+.dice {
+    width: 80px;
+    height: 80px;
+    background: #fff;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #333;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.dice.rolling {
+    animation: rollDice 0.8s ease-in-out;
+}
+
+@keyframes rollDice {
+    0%, 100% { transform: rotateX(0) rotateY(0); }
+    25% { transform: rotateX(180deg) rotateY(0); }
+    50% { transform: rotateX(180deg) rotateY(180deg); }
+    75% { transform: rotateX(0) rotateY(180deg); }
+}
+
+.dice.result {
+    animation: showResult 0.3s ease-out;
+}
+
+@keyframes showResult {
+    0% { transform: scale(0.8); opacity: 0.5; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.attack-face {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+    color: white;
+}
+
+.defend-face {
+    background: linear-gradient(135deg, #4ecdc4, #44a3a0);
+    color: white;
+}
+
+.special-face {
+    background: linear-gradient(135deg, #ffd93d, #ffb700);
+    color: #333;
+}
+
+.empty-face {
+    background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+    color: #ddd;
+}
+
+.hp-bar {
+    margin: 10px 0;
+}
+
+.hp-bar-bg {
+    width: 100%;
+    height: 20px;
+    background: #555;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 5px;
+}
+
+.hp-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #e74c3c, #c0392b);
+    transition: width 0.3s ease;
+}
+
+.shield-display {
+    color: #3498db;
+    font-weight: bold;
+    margin: 10px 0;
+}
+
+.target-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.defeated-target {
+    padding: 10px;
+    background: #555;
+    color: #888;
+    border-radius: 5px;
+    text-decoration: line-through;
+}
+
+.battle-log {
+    background: #1a1a1a;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 15px 0;
+    font-family: monospace;
+    line-height: 1.6;
+}
+
+.effect-message {
+    padding: 10px;
+    margin: 5px 0;
+    background: #2c3e50;
+    border-left: 4px solid #3498db;
+    border-radius: 4px;
+}
+
+.victory-screen, .defeat-screen {
+    text-align: center;
+    padding: 40px;
+    background: #2a2a2a;
+    border-radius: 10px;
+    max-width: 600px;
+    margin: 40px auto;
+}
+
+.victory-screen h1 {
+    color: #2ecc71;
+    font-size: 2.5em;
+    margin-bottom: 30px;
+}
+
+.defeat-screen h1 {
+    color: #e74c3c;
+    font-size: 2.5em;
+    margin-bottom: 30px;
+}
+
+.energy-loss {
+    color: #e74c3c;
+    font-size: 1.3em;
+    font-weight: bold;
+    margin: 15px 0;
+}
+
+.critical-message {
+    background: #c0392b;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+}
+
+.forest-area, .base-area {
+    max-width: 600px;
+    margin: 40px auto;
+    padding: 30px;
+    background: #2a2a2a;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.hero-status-panel {
+    margin: 20px 0;
+    padding: 15px;
+    background: #333;
+    border-radius: 8px;
+}
+
+.base-hero-card {
+    background: #444;
+    padding: 10px;
+    margin: 8px 0;
+    border-radius: 5px;
+    border-left: 4px solid #3498db;
+}
+
+.base-hero-card .hero-name {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: #fff;
+}
+
+.base-hero-card .hero-hp {
+    color: #e74c3c;
+    margin-top: 5px;
+}
+
+.dice-results-summary {
+    margin-top: 20px;
+    padding: 15px;
+    background: #333;
+    border-radius: 8px;
+}
+
+.result-item {
+    padding: 8px;
+    margin: 5px 0;
+    background: #444;
+    border-radius: 4px;
+}
+
+
+
+
+
+/* 鼠标悬停的tooltip 样式 */
+.hover {
+    position: relative;
+    display: inline-block;
+}
+
+.hover .hoverblock {
+    visibility: hidden;
+    min-width: 200px;
+    background-color: grey;
+    color: white;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 0;
+  	bottom: 100%;
+    position: absolute;
+    z-index: 1;
+
+}
+
+.hover:hover .hoverblock {
+    visibility: visible;
+}
+
+
+/* twine-user-stylesheet #1: "simple-inventory.css" */
+/* Simple Inventory, for SugarCube 2, by Chapel
+v3.0.1, 2024-07-22, 8c9749dbafa5f12948d743a8dedd4e1c74bb9e26 */
+ul.simple-inventory-list{margin:0 auto;padding:0}.simple-inventory-listing{list-style:none;padding:.3rem .3rem .3rem 1rem;display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr}.simple-inventory-listing>a,.simple-inventory-listing>span{display:inline-block}.all-listing.simple-inventory-listing{border-top:1px solid #fafafa;background-color:transparent}.drop-link{color:#e33}.drop-link:active,.drop-link:focus,.drop-link:hover{color:#f88}.consume-btn{color:#19AAD1;background-color:transparent;border:none;cursor:pointer;text-decoration:underline;padding:0;font-family:inherit;font-size:inherit}.consume-btn:active,.consume-btn:focus,.consume-btn:hover{color:#0d7a9e}.simple-inventory-filter{display:none !important;}.simple-inventory-filter input{display:none !important;}
+/* End Simple Inventory */
+/* twine-user-stylesheet #2: "Story Stylesheet" */
+.shopping-interface p {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto; /* 名称 / 价格 / 余量 / 操作 */
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.shop-listing {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #444;
+    border-radius: 6px;
+    background-color: #1f1f1f;
+}
+
+.shop-listing .item-name {
+    font-weight: 600;
+}
+
+.shop-listing .price strong {
+    color: #fca303;
+}
+
+.shop-listing .actions a {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border: 2px solid #555;
+    border-radius: 4px;
+    color: #fff;
+    background-color: #333;
+    transition: all 0.2s;
+}
+
+.shop-listing .actions a:hover {
+    background-color: #555;
+    border-color: #777;
+}
+
+#inventory-search {
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+#inv-search-box {
+    padding: 0.5rem;
+    width: 60%;
+    max-width: 300px;
+    background-color: #222;
+    color: #fff;
+    border: 2px solid #555;
+    font-size: 1rem;
+}
+
+#inv-search-box:focus {
+    outline: none;
+    border-color: rgba(252, 173, 3, 1);
+}
+
+#inventory-categories {
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
+}
+
+.category-btn {
+    padding: 0.5rem 1rem;
+    margin-right: 0; /* 使用容器 gap 控制间距 */
+    background-color: #333;
+    color: #fff;
+    border: 2px solid #555;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.category-btn:hover {
+    background-color: #555;
+}
+
+.category-btn.active {
+    background-color: #0f0;
+    color: #000;
+    border-color: #0f0;
+    font-weight: bold;
+}
+
+.simple-inventory-listing.cat-hidden {
+    display: none;
+}
+
+/* 小屏幕自适应：按钮在窄屏自动换行 */
+@media (max-width: 600px) {
+    #inventory-categories {
+        flex-wrap: wrap;
+        row-gap: 0.5rem;
+    }
+    .category-btn {
+        flex: 0 0 auto;
+    }
+}
+/*Inventory ends here*/
+
+
+
+/*侧边栏进度条 */
+.state-progress {
+  position: relative;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.state-bar {
+    position: relative;
+    cursor: pointer;
+    width: 232px;
+    height: 12px;  /* 加粗进度条用 */
+    /* 外边框 */
+    border: 1px solid #6b5fa7;
+    border-radius: 4px;
+    /* 内边距让进度条不贴边 */
+    padding: 1px;
+    box-sizing: border-box;
+    background: #1c1a24;
+}
+
+.state-tooltip {
+    display: none;
+    position: absolute;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+/* twine-user-stylesheet #1: "storytree.css" */
+/* StoryTree Styles, Ver.0.1.9 */
+/* Build Date: 2025-01-24T20:25:19.582Z */
+.story-dialogue{background:rgba(40,40,40,.95);border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.3);display:grid;gap:10px;grid-template-areas:"avatar name" "avatar content" "choices choices";grid-template-columns:80px 1fr;margin:20px auto;max-width:600px;padding:15px;position:relative}.story-dialogue .avatar{background-color:#e0e0e0;background-position:50%;background-size:cover;border-radius:4px;grid-area:avatar;height:60px;width:60px}.story-dialogue .name{color:#fff;font-size:1.1em;font-weight:700;grid-area:name;padding:5px 0}.story-dialogue .content{color:#e0e0e0;grid-area:content;line-height:1.5;margin-bottom:15px}.story-dialogue .choices{border-top:1px solid #444;display:flex;flex-direction:column;gap:8px;grid-area:choices;padding-top:10px}.story-dialogue .choices a{background:#444;border-radius:4px;color:#fff;padding:8px 15px;text-decoration:none;transition:background .2s}.story-dialogue .choices a:hover{background:#666;cursor:pointer}
+/* End StoryTree Styles */
+/* twine-user-stylesheet #2: "index.css" */
+.warning-box {
+    background: rgba(220, 53, 69, 0.1);
+    border-left: 4px solid #dc3545;
+    border-radius: 4px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.warning-title {
+    color: #dc3545;
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.warning-content {
+    color: #666;
+    line-height: 1.6;
+}
+
+.warning-content p {
+    margin: 0.5rem 0;
+}
+
+
+/* 成就系统 */
+.zoom-in {
+  display: inline-block;       
+  animation: zoomInEffect 0.6s ease forwards;
+  opacity: 0;                   
+}
+
+@keyframes zoomInEffect {
+  0% {
+    transform: scale(0.5);      /* 动画开始时缩小 */
+    opacity: 0;                 /* 初始时透明 */
+  }
+  50% {
+    transform: scale(1.2);      /* 中间阶段稍微放大 */
+    opacity: 1;                 /* 变为完全不透明 */
+  }
+  100% {
+    transform: scale(1);        /* 最终恢复到正常大小 */
+    opacity: 1;                 /* 保持完全不透明 */
+  }
+}
+
+:root {
+    --glass-strong: rgba(255, 255, 255, 0.12);
+    --glass-medium: rgba(255, 255, 255, 0.08);
+    --glass-light: rgba(255, 255, 255, 0.06);
+    --bg-modal: rgba(23, 25, 35, 0.95);  
+    --bg-dropdown: rgba(28, 30, 40, 0.95);
+    --bg-dropdown-hover: rgba(45, 50, 65, 0.98);
+    --bg-card: rgba(28, 30, 40, 0.95);
+    --text-primary: rgba(255, 255, 255, 0.95);
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --text-tertiary: rgba(255, 255, 255, 0.5);
+    --text-disabled: rgba(255, 255, 255, 0.35);
+    --border-light: rgba(255, 255, 255, 0.08);
+    --border-medium: rgba(255, 255, 255, 0.12);
+    --glow-primary: rgba(255, 255, 255, 0.15);
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.14);
+}
+
+@keyframes fadeScale {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes achievementSlideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+#show-achievements {
+    position: relative;
+    padding: 0.875rem 1.75rem;
+    background: var(--glass-light);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+    will-change: transform;  
+}
+
+#show-achievements:hover {
+    background: var(--glass-medium);
+    transform: translateY(-2px);
+}
+
+.achievements-popup {
+    display: none;
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    z-index: 999;
+    width: 85%;
+    max-width: 500px;
+    height: fit-content;
+    max-height: 70vh;
+    background: var(--bg-modal);
+    border: 1px solid var(--border-light);
+    animation: fadeScale 0.2s ease forwards;
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: var(--shadow-lg);
+    will-change: transform, opacity;  
+}
+
+.achievements-content {
+    background: var(--bg-card);
+    margin: 0;
+    padding: 1.25rem;
+    width: 100%;
+    height: 100%;
+    max-height: calc(70vh - 2rem);
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+    position: relative;
+    overflow-y: auto;
+    overscroll-behavior: contain;  
+}
+
+
+.achievements-content h3 {
+    color: var(--text-primary);
+    font-size: 1.125rem;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 1.25rem;
+    letter-spacing: -0.02em;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.achievements-filters {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 0.75rem;
+    background: var(--glass-light);
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+}
+
+.achievements-filters select {
+    flex: 1;
+    padding: 0.75rem 2rem 0.75rem 0.75rem;
+    background: var(--bg-dropdown);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 24 24' stroke='rgba(255,255,255,0.7)'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+    transition: background-color 0.2s ease;
+}
+
+.achievements-filters select:hover {
+    background-color: var(--bg-dropdown-hover);
+}
+
+.achievement-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.875rem;
+    margin-bottom: 0.625rem;
+    background: var(--glass-light);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    transition: transform 0.2s ease;
+    will-change: transform, opacity;
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-modal);
+    z-index: 998;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    display: none;
+}
+
+.achievement-item.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.achievement-item.unlocked-current {
+    background: var(--glass-medium);
+}
+
+.achievement-item.unlocked-other {
+    opacity: 0.8;
+}
+
+.achievement-item.locked {
+    opacity: 0.7;
+}
+
+.achievement-icon {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    background: var(--glass-medium);
+    border-radius: 6px;
+}
+
+.achievement-icon-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 6px;
+}
+
+.achievement-title {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.9375rem;
+    margin-bottom: 0.25rem;
+}
+
+.achievement-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+#close-achievements {
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    background: var(--glass-light);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 1000;
+}
+
+#close-achievements:hover {
+    color: var(--text-primary);
+    background: var(--glass-medium);
+}
+
+.achievement {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    width: 280px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    z-index: 999;
+    transform: translateX(100%);
+    opacity: 0;
+    will-change: transform, opacity;
+}
+
+.achievement.show {
+    animation: achievementSlideIn 0.3s ease forwards;
+}
+
+@media (max-width: 768px) {
+    .achievements-popup {
+        width: 90%;
+        max-height: 80vh;
+        padding: 0.75rem;
+    }
+    
+    .achievements-filters {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .achievement {
+        width: calc(100% - 2rem);
+        right: 1rem;
+    }
+}
+
+.achievements-content {
+    -webkit-overflow-scrolling: touch;  
+    scroll-behavior: smooth;
+}
+
+.achievements-popup,
+.achievement-item,
+.achievement {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+
+/*弹窗多tab */
+#ui-dialog-titlebar {   /*弹窗标题*/
+	background-color: #000;  /*标题的背景颜色*/
+	min-height: 24px;  /*最小高度*/
+	position: relative;  /*相对定位*/
+    height: 52px;
+}
+
+#ui-dialog-title {
+	font-size: 1.5em;  /* 标题的字体大小为1.5em（相对于父元素的字体大小） */
+	margin: 0;  /* 标题的外边距为0 */
+	padding: 0.2em 3.5em 0.2em 0.5em;  /* 标题的内边距，上下为0.2em，左右分别为3.5em和0.5em */
+	text-align: center;  /* 标题文字居中对齐 */
+	text-transform: uppercase;  /* 将标题文字转换为大写字母 */
+  
+}
+
+.title-buttons {
+    display: flex;
+    color:#fff;
+    gap: 10px; /* 按钮之间的间距 */
+    height: 100%; 
+}
+
+.popup-button {
+    background-color: #000; 
+    padding: 5px 10px;
+    cursor: pointer;
+    color: #ffffff;
+    text-align: center;
+    height: 3rem;
+    font-size: 15px;
+    border: transparent;
+    border-bottom: 1px solid #444;
+    /*background-color: black;*/
+}
+
+.popup-button:hover {
+  border-bottom: 1px solid #444;
+    
+}
+
+.popup-button.active {
+  background-color: rgba(169, 169, 169, 0.3);
+  border-radius: 20px 20px 0 0;
+}

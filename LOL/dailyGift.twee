@@ -1,0 +1,137 @@
+:: GiftSettings [init]
+// 每日礼物系统配置
+<<set setup.dailyGifts = {
+    0: [ // 周日
+        { itemId: "apple", quantity: 5 },
+        { itemId: "glass_shard", quantity: 3 },
+        { itemId: "gemstone", quantity: 1 }
+    ],
+    1: [ // 周一
+        { itemId: "coal", quantity: 8 },
+        { itemId: "iron_ingot", quantity: 2 },
+        { itemId: "pretty_stone", quantity: 4 }
+    ],
+    2: [ // 周二
+        { itemId: "glass_shard", quantity: 5 },
+        { itemId: "gold_nugget", quantity: 1 },
+        { itemId: "apple", quantity: 3 }
+    ],
+    3: [ // 周三
+        { itemId: "iron_ingot", quantity: 4 },
+        { itemId: "gemstone", quantity: 2 },
+        { itemId: "coal", quantity: 6 }
+    ],
+    4: [ // 周四
+        { itemId: "pretty_stone", quantity: 6 },
+        { itemId: "gold_nugget", quantity: 2 },
+        { itemId: "apple", quantity: 4 }
+    ],
+    5: [ // 周五
+        { itemId: "gemstone", quantity: 3 },
+        { itemId: "glass_shard", quantity: 8 },
+        { itemId: "coal", quantity: 5 }
+    ],
+    6: [ // 周六
+        { itemId: "gold_nugget", quantity: 3 },
+        { itemId: "iron_ingot", quantity: 3 },
+        { itemId: "pretty_stone", quantity: 5 }
+    ]
+}>>
+
+<<set setup.weekDayNames = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]>>
+
+// 初始化玩家的每日礼物追踪
+<<set $dailyGiftLastClaimedDate to null>>
+
+:: DailyGiftScript [script]
+// 每日礼物宏
+Macro.add('dailygiftpopup', {
+    handler: function() {
+        var $button = $("<button id='show-daily-gift'>星灵的礼物</button>");
+        
+        $button.on('click', () => {
+            openDailyGiftDialog();
+        });
+        
+        $button.appendTo(this.output);
+    }
+});
+
+// 打开每日礼物弹窗的函数
+window.openDailyGiftDialog = function() {
+    var now = new Date();
+    var dayOfWeek = now.getDay();
+    var today = now.toDateString();
+    var weekDayName = setup.weekDayNames[dayOfWeek];
+    
+    // 检查今天是否已经领取
+    var alreadyClaimed = State.variables.dailyGiftLastClaimedDate === today;
+    
+    var dialogHTML = "<div id='daily-gift-content'>" +
+        "<div class='daily-gift-info'>" +
+            "<p><strong>今天是：</strong>" + weekDayName + "</p>" +
+            "<p><strong>日期：</strong>" + now.toLocaleDateString('zh-CN') + "</p>" +
+        "</div>";
+    
+    if (alreadyClaimed) {
+        dialogHTML += "<div class='gift-status already-claimed'>" +
+            "<p>✓ 你今天已经领取过礼物了！</p>" +
+            "<p>明天再来吧~</p>" +
+        "</div>";
+    } else {
+        var giftPool = setup.dailyGifts[dayOfWeek];
+        var randomGift = giftPool[Math.floor(Math.random() * giftPool.length)];
+        var itemName = setup.Item.get(randomGift.itemId).name;
+        
+        dialogHTML += "<div class='gift-status unclaimed'>" +
+            "<p>今日" + weekDayName + "的礼物：</p>" +
+            "<div class='gift-display'>" +
+                "<span class='gift-icon'>🎁</span>" +
+                "<p class='gift-item'><strong>" + itemName + " x" + randomGift.quantity + "</strong></p>" +
+            "</div>" +
+            "<button id='claim-daily-gift' data-item='" + randomGift.itemId + "' data-quantity='" + randomGift.quantity + "'>领取礼物</button>" +
+        "</div>";
+    }
+    
+    dialogHTML += "<div class='gift-pool-preview'>" +
+        "<h4>" + weekDayName + "礼物池：</h4>" +
+        "<ul>";
+    
+    setup.dailyGifts[dayOfWeek].forEach(gift => {
+        var itemName = setup.Item.get(gift.itemId).name;
+        dialogHTML += "<li>" + itemName + " x" + gift.quantity + "</li>";
+    });
+    
+    dialogHTML += "</ul></div></div>";
+    
+    Dialog.setup("星灵的礼物", "daily-gift");
+    Dialog.append(dialogHTML);
+    
+    // 绑定领取按钮事件
+    setTimeout(() => {
+        $('#claim-daily-gift').on('click', function() {
+            var itemId = $(this).data('item');
+            var quantity = $(this).data('quantity');
+            var itemName = setup.Item.get(itemId).name;
+            
+            // 添加物品到玩家背包
+            var inv = State.variables.player;
+            inv.pickup(itemId, quantity);
+            
+            // 记录领取日期
+            State.variables.dailyGiftLastClaimedDate = today;
+            
+            // 更新显示
+            $('.gift-status').removeClass('unclaimed').addClass('already-claimed');
+            $('.gift-status').html(
+                "<p>✓ 成功领取 " + itemName + " x" + quantity + "！</p>" +
+                "<p>已添加到你的背包中</p>" +
+                "<p>明天再来吧~</p>"
+            );
+            
+            $('#claim-daily-gift').remove();
+        });
+    }, 0);
+    
+    Dialog.open();
+};

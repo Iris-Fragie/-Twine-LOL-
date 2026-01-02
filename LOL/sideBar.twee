@@ -1,0 +1,88 @@
+
+:: addStates [widget nobr] {"position":"1050,50","size":"100,100"}
+<<widget "addStates">>
+    /*_args[0]表示要增加的数值类型，只能是status中的属性*/
+    /*_args[1]表示要增加的数值*/
+
+//这里修改数值；
+    <<set _states=$states[_args[0]]>>
+    
+
+    <<set _states.value+=_args[1]>>
+
+//这里判断临界值；
+    <<if _states.value <0 >>
+        <<set _states.value=0>>
+    <</if>>
+    <<if _states.value > _states.max >>
+        <<set _states.value=_states.max>>
+    <</if>>
+    
+    /*指定颜色和width*/
+    <<set _width=(100*_states.value/_states.max)+"%">>
+    /*<<run console.log(_width)>>*/
+    
+
+    
+    <<set _width1=(100*_states.value/_states.max)>>
+    /*<<run console.log(_width1)>>*/
+
+/*这里判断处于那个区间*/
+    <<for _i, _name range $rangesProgress>>
+    <<if _width1<=_name>>
+        <<set _color= $colorProgress[_i]>>
+        <<break>>
+    <</if>>
+    <</for>>
+    
+    /*<<run console.log(_color)>>*/
+
+/*修改进度条属性*/
+    <<run $('#'+_args[0]+'').css({
+        'width': ''+_width+'',
+        'background-color': ''+_color+''
+    })>>
+
+    <</widget>>
+
+:: showProgress [widget nobr] {"position":"950,50","size":"100,100"}
+<<widget "showProgress">><<nobr>>
+    <<set _states=$states[_args[0]]>>
+    
+    <<set _width1=(100*_states.value/_states.max)>>
+    
+    <<for _i, _name range $rangesProgress>>
+    <<capture _i>>
+    <<if _width1<=_name>>
+        <<set _color= $colorProgress[_i]>>
+        <<break>>
+    <</if>>
+    <</capture>>
+    <</for>>
+    
+    <<set _style="background-color:"+_color+";width:"+_width1+"%">>
+    <div @id="'bar-'+_args[0]" class="state-bar" @data-state-id="_args[0]">
+        <div @id="_args[0]" class="state-progress" @style="_style"></div>
+        <div class="state-tooltip"></div>
+    </div>
+    
+    <<run setup.updateTooltip(_args[0])>>
+<</nobr>>
+<</widget>>
+
+:: xpWidgets [widget] {"position":"1050,150","size":"100,100"}
+<<widget "xp">>
+    <<set _gain to Number(_args[0] || 0)>>
+    <<run (function(){
+        $xp = Math.max(0, $xp + _gain);
+        while ($xp >= $xpToNext) {
+            $xp -= $xpToNext;
+            $level += 1;
+            $xpToNext = Math.ceil($xpToNext * 1.25);
+            UI.alert("Level up! Now level " + $level);
+        }
+    })()>>
+    <<replace "#level">><<= $level>><</replace>>
+    <<replace "#xp">><<= $xp>><</replace>>
+    <<replace "#xp-to-next">><<= $xpToNext>><</replace>>
+<</widget>>

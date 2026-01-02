@@ -1,0 +1,299 @@
+
+:: inventoryWidgets [widget nobr] {"position":"950,150","size":"100,100"}
+<<widget "Money">>
+    <<set $Money to Math.clamp($Money + _args[0], 0, Infinity)>>
+    <<replace "#Money">><<= $Money>><</replace>>
+<</widget>>
+
+<<widget "buylink">>
+    <<set _item to _args[0]>>
+    <<set _amount to _args[1]>>
+    <<set _price to setup.prices.get(_item) || 1>>
+    <p @data-item="_item" class="buy-listing shop-listing">
+        <span class="item-name"><<= (setup.Item.has(_item) ? setup.Item.get(_item).name : _item) >></span>
+        <span class="price">价格：<strong><<= _price >></strong></span>
+        <span class="count"><<= _amount >></span>
+        <span class="actions">
+            <<capture _item, _amount, _price>>
+                <<link "购买">>
+                    <<if $Money < _price>>
+                        <<run UI.alert("你的金币不足！")>>
+                    <<else>>
+                        <<set $Money -= _price>>
+                        <<transfer $shop $player _item 1>>
+                        <<set _amount -->>
+                        <<replace `"p.buy-listing[data-item=\"" + _item + "\"] > .count"`>><<= _amount >><</replace>>
+                        <<replace "#money-display">><<= $Money >><</replace>>
+                        <<if _amount <= 0>>
+                            <<remove `"p.buy-listing[data-item=\"" + _item + "\"]"`>>
+                        <</if>>
+                    <</if>>
+                <</link>>
+            <</capture>>
+        </span>
+    </p>
+<</widget>>
+
+<<widget "selllink">>
+    <<set _item to _args[0]>>
+    <<set _amount to _args[1]>>
+    <<set _price to setup.prices.get(_item) || 1>>
+    <p @data-item="_item" class="sell-listing shop-listing">
+        <span class="item-name"><<= (setup.Item.has(_item) ? setup.Item.get(_item).name : _item) >></span>
+        <span class="price">售价：<strong><<= _price >></strong></span>
+        <span class="count"><<= _amount >></span>
+        <span class="actions">
+            <<capture _item, _amount, _price>>
+                <<link "卖出">>
+                    <<set $Money += _price>>
+                    <<transfer $player $shop _item 1>>
+                    <<set _amount -->>
+                    <<replace `"p.sell-listing[data-item=\"" + _item + "\"] > .count"`>><<= _amount >><</replace>>
+                    <<replace "#money-display">><<= $Money >><</replace>>
+                    <<if _amount <= 0>>
+                        <<remove `"p.sell-listing[data-item=\"" + _item + "\"]"`>>
+                    <</if>>
+                <</link>>
+            <</capture>>
+        </span>
+    </p>
+<</widget>>
+
+
+
+:: Start {"position":"1325,675","size":"100,100"}
+You are at your house.
+Next to you is your storage locker!
+[[Open storage locker|Storage]]
+[[Go to the market|Market]]
+[[Go to the map|Map]]
+
+
+:: Storage {"position":"1325,825","size":"100,100"}
+<h2>On hand:</h2>\
+<<give $player $storage stack all>>
+<h2>In storage:</h2>\
+<<take $storage $player stack all>>
+
+[[Go back|Start]]
+
+
+:: Buy [nobr] {"position":"1100,675","size":"100,100"}
+<h2>Items for sale:</h2>
+<div class="shopping-interface">
+<<for _item, _amount range $shop.table>>
+    <<buylink _item _amount>>
+<</for>>
+</div>
+<br><br>
+[[Go back|Market]]
+
+:: Sell [nobr] {"position":"1200,675","size":"100,100"}
+<h2>Items on hand:</h2>
+<div class="shopping-interface">
+<<for _item, _amount range $player.table>>
+    <<selllink _item _amount>>
+<</for>>
+</div>
+<br><br>
+[[Go back|Market]]
+
+:: Inventory {"position":"375,375","size":"100,100"}
+<div id="inventory-search">
+	<input type="text" id="inv-search-box" placeholder="Search items...">
+</div>
+<div id="inventory-categories">
+	<button class="category-btn active" data-category="all">All</button>
+	<button class="category-btn" data-category="ore">Ore</button>
+	<button class="category-btn" data-category="crafting">Crafting</button>
+	<button class="category-btn" data-category="decoration">Decoration</button>
+	<button class="category-btn" data-category="food">Consumable</button>
+</div>
+<<inv $player>>
+
+<div id="inventory-action-log" style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 8px; border: 1px solid #ddd;">
+	<p id="action-log-message" style="margin: 0; color: #555; font-style: italic;">你打开了背包翻找物品</p>
+</div>
+
+<<run (function() {
+    // 追踪连续消耗的物品
+    var lastConsumedItem = null;
+    var consumeCount = 0;
+    var consumeTimeout = null;
+    
+    // 分类按钮功能
+    $(document).off("click", ".category-btn").on("click", ".category-btn", function() {
+        var category = $(this).data("category");
+        var wrapper = $(".simple-inventory-wrapper");
+        var allItems = wrapper.find(".simple-inventory-listing:not(.all-listing)");
+        
+        // 更新按钮样式
+        $(".category-btn").removeClass("active");
+        $(this).addClass("active");
+        
+        // 清空搜索框
+        $("#inv-search-box").val("");
+        
+        if (category === "all") {
+            allItems.show();
+        } else {
+            allItems.each(function() {
+                var itemId = $(this).data("item-id").replace(/^-+|-+$/g, "");
+                var item_obj = setup.Item.get(itemId);
+                if (item_obj && item_obj.hasTag(category)) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+        }
+    });
+    
+    // 搜索框功能
+    $(document).off("input", "#inv-search-box").on("input", "#inv-search-box", function() {
+        var searchText = $(this).val().toLowerCase();
+        var wrapper = $(".simple-inventory-wrapper");
+        var allItems = wrapper.find(".simple-inventory-listing:not(.all-listing)");
+        var activeCategory = $(".category-btn.active").data("category");
+        
+        if (!searchText) {
+            // 如果搜索框为空，按分类显示
+            $(".category-btn.active").trigger("click");
+            return;
+        }
+        
+        allItems.each(function() {
+            var itemName = $(this).data("keyword").toLowerCase();
+            var itemId = $(this).data("item-id").replace(/^-+|-+$/g, "");
+            var item_obj = setup.Item.get(itemId);
+            var matchesSearch = itemName.includes(searchText);
+            var matchesCategory = activeCategory === "all" || (item_obj && item_obj.hasTag(activeCategory));
+            
+            if (matchesSearch && matchesCategory) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+    });
+    
+    // 消耗品使用功能
+    $(document).off("click", ".consume-btn").on("click", ".consume-btn", function() {
+        var itemId = $(this).data("item-id").replace(/^-+|-+$/g, "");
+        var item_obj = setup.Item.get(itemId);
+        
+        if (item_obj && item_obj.hasTag("food")) {
+            // 增加体力 - 使用配置表决定恢复量
+            var restoreAmount = (setup.foodEnergy && setup.foodEnergy[itemId]) ? setup.foodEnergy[itemId] : 20;
+            new Wikifier(null, "<<addStates \"energy\" " + restoreAmount + ">>");
+            // 消耗物品 - 从背包减少1个
+            $player.drop(itemId, 1);
+            
+            // 独特食物追踪系统
+            var isNewFood = false;
+            if (State.variables.uniqueFoodsEaten.indexOf(itemId) === -1) {
+                State.variables.uniqueFoodsEaten.push(itemId);
+                isNewFood = true;
+                
+                // 检查是否达到新的里程碑（每5个独特食物）
+                var uniqueCount = State.variables.uniqueFoodsEaten.length;
+                var newMilestones = Math.floor(uniqueCount / 5);
+                
+                if (newMilestones > State.variables.foodMilestonesReached) {
+                    // 增加体力上限
+                    var milestoneIncrease = (newMilestones - State.variables.foodMilestonesReached) * 10;
+                    State.variables.states.energy.max += milestoneIncrease;
+                    State.variables.foodMilestonesReached = newMilestones;
+                    
+                    // 显示特殊消息
+                    setTimeout(function() {
+                        $.wiki("你品尝了足够多的独特食物！体力上限增加了" + milestoneIncrease + "点！(当前上限: " + State.variables.states.energy.max + ")");
+                    }, 100);
+                }
+                
+                // 检查美食家成就（15/30/45种独特食物）
+                if (uniqueCount === 15) {
+                    setTimeout(function() {
+                        new Wikifier(null, "<<achievement '美食家1'>>");
+                    }, 200);
+                } else if (uniqueCount === 30) {
+                    setTimeout(function() {
+                        new Wikifier(null, "<<achievement '美食家2'>>");
+                    }, 200);
+                } else if (uniqueCount === 45) {
+                    setTimeout(function() {
+                        new Wikifier(null, "<<achievement '美食家3'>>");
+                    }, 200);
+                }
+            }
+            
+            // 更新消息日志
+            var itemName = item_obj.name;
+            
+            // 检查是否是连续消耗同一物品
+            if (lastConsumedItem === itemId) {
+                consumeCount++;
+            } else {
+                // 不同物品，重置计数
+                lastConsumedItem = itemId;
+                consumeCount = 1;
+            }
+            
+            // 清除之前的超时
+            if (consumeTimeout) {
+                clearTimeout(consumeTimeout);
+            }
+            
+            // 显示消息
+            var message = "你吃了" + itemName + "，恢复了" + restoreAmount + "体力。";
+            if (consumeCount > 1) {
+                message += "（x" + consumeCount + "）";
+            }
+            $("#action-log-message").text(message);
+            
+            // 3秒后重置为默认消息
+            consumeTimeout = setTimeout(function() {
+                $("#action-log-message").text("你打开了背包翻找物品");
+                lastConsumedItem = null;
+                consumeCount = 0;
+            }, 3000);
+            
+            // 刷新UI
+            $(".category-btn.active").trigger("click");
+        }
+    });
+    
+    // 为食物类物品添加消耗按钮
+    $(document).on(":inventory-update.simple-inventory", function() {
+        var wrapper = $(".simple-inventory-wrapper");
+        wrapper.find(".simple-inventory-listing:not(.all-listing)").each(function() {
+            var itemId = $(this).data("item-id").replace(/^-+|-+$/g, "");
+            var item_obj = setup.Item.get(itemId);
+            
+            // 如果是食物且还没有消耗按钮，添加它
+            if (item_obj && item_obj.hasTag("food") && !$(this).find(".consume-btn").length) {
+                // 找到最后一个操作按钮的位置，在其后插入消耗按钮
+                var lastBtn = $(this).find("a, button").last();
+                if (lastBtn.length) {
+                    $("<button>")
+                        .addClass("consume-btn")
+                        .text("Consume")
+                        .attr("data-item-id", $(this).data("item-id"))
+                        .insertAfter(lastBtn);
+                } else {
+                    // 如果没有找到按钮，直接在列表项的最后添加
+                    $("<button>")
+                        .addClass("consume-btn")
+                        .text("Consume")
+                        .attr("data-item-id", $(this).data("item-id"))
+                        .appendTo($(this));
+                }
+            }
+        });
+    });
+    
+    // 初始化时触发一次事件来添加消耗按钮
+    setTimeout(function() {
+        $(document).trigger(":inventory-update.simple-inventory");
+    }, 100);
+})()>>
